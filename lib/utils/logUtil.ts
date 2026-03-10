@@ -48,14 +48,15 @@ class ConsoleLogger implements ILogger {
 }
 
 let winston: any;
-if (typeof process !== "undefined" && process.release?.name === 'node') {
+if (typeof process !== "undefined" && process.release?.name === "node") {
     try {
-        const m = await import("winston");
+        // Non-literal specifier hides from esbuild's static analysis so
+        // winston is NOT bundled into CF Worker builds.
+        const name = "winston";
+        const m = await import(/* @vite-ignore */ name);
         winston = m.default || m;
-    } catch (e) {
-        // If winston fails to load in Node.js (e.g., not installed),
-        // we'll fall back to ConsoleLogger.
-        console.warn("Winston could not be loaded in Node.js environment. Falling back to ConsoleLogger.", e);
+    } catch {
+        // winston not installed — fall back to ConsoleLogger
     }
 }
 

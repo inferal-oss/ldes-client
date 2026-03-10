@@ -44,6 +44,10 @@ export { enhanced_fetch } from "./fetcher";
 export { intoConfig } from "./config";
 export * from "./condition";
 
+// Re-export storage types and adapters
+export type { KVStore, Storage } from "./storage";
+export { MemoryStorage } from "./storage/memory";
+
 export type ClientEvents = {
     fragment: FetchedPage;
     description: LDESInfo;
@@ -95,22 +99,22 @@ export class Client {
         this.streamId = stream;
         this.ordered = ordered;
         this.clientStateManager = new ClientStateManager(
+            this.config.storage,
             this.config.statePath,
-            this.config.startFresh
+            this.config.startFresh,
         );
         this.modulatorFactory = new ModulatorFactory(
             this.clientStateManager,
-            this.config.statePath !== undefined,
+            this.config.statePath !== undefined || this.config.storage !== undefined,
             this.config.concurrentFetches,
             this.config.lastVersionOnly,
         );
-        if (typeof process !== "undefined") {
-            // Handle exit gracefully
-            handleExit(() => {
-                this.logger.warn("Process was externally terminated, closing client...");
-                this.logger.info("Managed to emit " + this.memberCount + " members from " + this.fragmentCount + " fragments before termination");
-            });
-        }
+        // handleExit internally checks for process signal support,
+        // so it's safe to call unconditionally (no-op on CF Workers)
+        handleExit(() => {
+            this.logger.warn("Process was externally terminated, closing client...");
+            this.logger.info("Managed to emit " + this.memberCount + " members from " + this.fragmentCount + " fragments before termination");
+        });
     }
 
     on<K extends EventKey<ClientEvents>>(
@@ -128,7 +132,7 @@ export class Client {
         close: () => void,
     ): Promise<void> {
         // Initialize the client state manager
-        this.clientStateManager.init();
+        await this.clientStateManager.init();
 
         // Fetch the given root URL
         const root: FetchedPage = await statelessPageFetch(
