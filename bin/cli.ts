@@ -40,6 +40,7 @@ program
         "follow only relations including members after a certain point in time",
     )
     .option("--basic-auth <username>:<password>", "HTTP basic auth information")
+    .option("--header-auth <header>:<value>", "HTTP header auth (e.g., 'Authorization:Bearer token')")
     .option(
         "--before <before>",
         "follow only relations including members before a certain point in time",
@@ -123,11 +124,28 @@ program
         startFresh = program.startFresh;
 
         fetch_config.concurrent = parseInt(program.concurrent);
+        if (program.basicAuth && program.headerAuth) {
+            console.error("--basic-auth and --header-auth are mutually exclusive");
+            process.exit(1);
+        }
         if (program.basicAuth) {
             fetch_config.auth = {
                 auth: program.basicAuth,
                 host: new URL(url).host,
                 type: "basic",
+            };
+        }
+        if (program.headerAuth) {
+            const colonIndex = program.headerAuth.indexOf(":");
+            if (colonIndex === -1) {
+                console.error("--header-auth must be in format 'Header:value'");
+                process.exit(1);
+            }
+            fetch_config.auth = {
+                header: program.headerAuth.substring(0, colonIndex),
+                value: program.headerAuth.substring(colonIndex + 1),
+                host: new URL(url).host,
+                type: "header",
             };
         }
         fetch_config.retry!.maxRetries = parseInt(program.retryCount);

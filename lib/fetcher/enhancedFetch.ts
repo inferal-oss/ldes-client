@@ -2,11 +2,20 @@ import { urlToUrl, getLoggerFor } from "../utils";
 
 const logger = getLoggerFor("EnhancedFetch");
 
-export type AuthConfig = {
+export type BasicAuthConfig = {
     type: "basic";
     auth: string;
     host: string;
 };
+
+export type HeaderAuthConfig = {
+    type: "header";
+    header: string;
+    value: string;
+    host: string;
+};
+
+export type AuthConfig = BasicAuthConfig | HeaderAuthConfig;
 
 export type RetryConfig = {
     codes: number[];
@@ -43,7 +52,9 @@ export function enhanced_fetch(
         : start_f;
 
     const fetch_f = config.auth
-        ? handle_basic_auth(safe_f, config.auth)
+        ? config.auth.type === "header"
+            ? handle_header_auth(safe_f, config.auth)
+            : handle_basic_auth(safe_f, config.auth)
         : safe_f;
 
     return limit_fetch_per_domain(
@@ -95,7 +106,7 @@ export function limit_fetch_per_domain(
 
 export function handle_basic_auth(
     fetch_f: typeof fetch,
-    config: AuthConfig,
+    config: BasicAuthConfig,
 ): typeof fetch {
     let authRequired = false;
 
@@ -126,6 +137,24 @@ export function handle_basic_auth(
         return resp;
     };
 
+    return auth_f;
+}
+
+export function handle_header_auth(
+    fetch_f: typeof fetch,
+    config: HeaderAuthConfig,
+): typeof fetch {
+    const auth_f: typeof fetch = async (input, init) => {
+        const url: URL = urlToUrl(input);
+        if (url.host === config.host) {
+            const reqInit = init || {};
+            const headers = new Headers(reqInit.headers);
+            headers.set(config.header, config.value);
+            reqInit.headers = headers;
+            return await fetch_f(input, reqInit);
+        }
+        return await fetch_f(input, init);
+    };
     return auth_f;
 }
 
