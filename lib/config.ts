@@ -2,6 +2,7 @@ import { empty_condition as emptyCondition } from "./condition";
 
 import type { NamedNode, Quad } from "@rdfjs/types";
 import type { Condition } from "./condition";
+import type { Storage } from "./storage";
 
 export interface ShapeConfig {
     quads: Quad[];
@@ -29,6 +30,7 @@ export interface Config {
     concurrentFetches?: number;
     startFresh?: boolean;
     fetch?: typeof fetch;
+    storage?: Storage;
 }
 
 export interface WithTarget {

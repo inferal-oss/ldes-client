@@ -23,11 +23,24 @@ export default {
         {
             name: 'dynamic-import-to-require',
             transform(code, id) {
+                let transformed = code;
+                let changed = false;
                 if (id.includes('logUtil')) {
-                    return {
-                        code: code.replace(/await import\(['"]winston['"]\)/g, 'require("winston")'),
-                        map: null
-                    };
+                    // Handle both literal import("winston") and variable import(name)
+                    // where name = "winston" — rewrite to require("winston")
+                    transformed = transformed.replace(/await import\(['"]winston['"]\)/g, 'require("winston")');
+                    transformed = transformed.replace(
+                        /const name = "winston";\s*const m = await import\(.*?name\)/g,
+                        'const m = require("winston")'
+                    );
+                    changed = true;
+                }
+                if (id.includes('state')) {
+                    transformed = transformed.replace(/await import\(['"]\.\/(storage\/level)(?:\.js)?['"]\)/g, 'require("./$1")');
+                    changed = true;
+                }
+                if (changed) {
+                    return { code: transformed, map: null };
                 }
             }
         }

@@ -7,6 +7,9 @@ import { createUriAndTermNamespace } from "@treecg/types";
 import { RdfStore } from "rdf-stores";
 import { streamToString } from "../lib/utils";
 import { replicateLDES } from "../lib/client";
+import { MemoryStorage } from "../lib/storage/memory";
+import { DOSqliteStorage } from "../lib/storage/do-sqlite";
+import { createDurableObjectState } from "@inferal-oss/cf-dosql";
 
 import type { FastifyInstance } from "fastify";
 import type { FetchedPage, LDESInfo } from "../lib/fetcher";
@@ -75,9 +78,53 @@ describe("Client tests", () => {
         }
     });
 
-    afterEach(() => {
-        fs.rmSync("client-state-main", { recursive: true, force: true });
-    });
+    interface StorageBackend {
+        name: string;
+        configOverrides(): Record<string, unknown>;
+        reset(): void;
+        persistsToFs: boolean;
+    }
+
+    const backends: StorageBackend[] = [
+        {
+            name: "LevelStorage",
+            configOverrides() { return { statePath: "client-state-main" }; },
+            reset() { fs.rmSync("client-state-main", { recursive: true, force: true }); },
+            persistsToFs: true,
+        },
+        (() => {
+            let storage: MemoryStorage | null = null;
+            return {
+                name: "MemoryStorage",
+                configOverrides() {
+                    if (!storage) storage = new MemoryStorage();
+                    return { storage };
+                },
+                reset() { storage = null; },
+                persistsToFs: false,
+            };
+        })(),
+        (() => {
+            let state: ReturnType<typeof createDurableObjectState> | null = null;
+            let storage: DOSqliteStorage | null = null;
+            return {
+                name: "DOSqliteStorage",
+                configOverrides() {
+                    if (!state) {
+                        state = createDurableObjectState();
+                        storage = new DOSqliteStorage(state.ctx.storage as any);
+                    }
+                    return { storage };
+                },
+                reset() {
+                    if (state) state.close();
+                    state = null;
+                    storage = null;
+                },
+                persistsToFs: false,
+            };
+        })(),
+    ];
 
     afterAll(async () => {
         await server.close();
@@ -188,11 +235,15 @@ describe("Client tests", () => {
         expect(gotDescEvent).toBe(true);
     });
 
+    for (const backend of backends) {
+    describe(`Storage: ${backend.name}`, () => {
+        afterEach(() => backend.reset());
+
     test("Client interruption and resuming in unoredered replication", async () => {
         // Setup client 1
         const client1 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         });
 
         let memCount = 0;
@@ -261,7 +312,9 @@ describe("Client tests", () => {
         expect(gotFragmentEvent1).toBe(true);
         expect(gotDescEvent1).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -270,7 +323,7 @@ describe("Client tests", () => {
         // Setup client 2
         const client2 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         });
 
         // Member stream object
@@ -327,14 +380,16 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     });
 
     test("Client interruption and resuming in ordered replication (ascending)", async () => {
         // Setup client 1
         const client1 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "ascending",
         );
@@ -411,7 +466,9 @@ describe("Client tests", () => {
             timestamps1.every((v, i) => i === 0 || v >= timestamps1[i - 1]),
         ).toBeTruthy();
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -420,7 +477,7 @@ describe("Client tests", () => {
         // Setup client 2
         const client2 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "ascending",
         );
@@ -486,14 +543,16 @@ describe("Client tests", () => {
             timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1]),
         ).toBeTruthy();
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     });
 
     test("Client interruption and resuming in ordered replication (descending)", async () => {
         // Setup client 1
         const client1 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "descending",
         );
@@ -551,7 +610,9 @@ describe("Client tests", () => {
         expect(gotFragmentEvent1).toBe(true);
         expect(gotDescEvent1).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -560,7 +621,7 @@ describe("Client tests", () => {
         // Setup client 2
         const client2 = replicateLDES({
             url: LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "descending",
         );
@@ -626,14 +687,16 @@ describe("Client tests", () => {
             timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1]),
         ).toBeTruthy();
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     });
 
     test("Client interruption and resuming in ordered replication (ascending) of Linked List LDES", async () => {
         // Setup client 1
         const client1 = replicateLDES({
             url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "ascending",
         );
@@ -690,7 +753,9 @@ describe("Client tests", () => {
         expect(gotFragmentEvent1).toBe(true);
         expect(gotDescEvent1).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -699,7 +764,7 @@ describe("Client tests", () => {
         // Setup client 2
         const client2 = replicateLDES({
             url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "ascending",
         );
@@ -765,14 +830,16 @@ describe("Client tests", () => {
             timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1]),
         ).toBeTruthy();
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     });
 
     test("Client interruption and resuming in ordered replication (descending) of Linked List LDES", async () => {
         // Setup client 1
         const client1 = replicateLDES({
             url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "descending",
         );
@@ -818,7 +885,9 @@ describe("Client tests", () => {
         expect(memCount).toBe(client1.memberCount);
         expect(gotFragmentEvent1).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -827,7 +896,7 @@ describe("Client tests", () => {
         // Setup client 2
         const client2 = replicateLDES({
             url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
         },
             "descending",
         );
@@ -893,13 +962,15 @@ describe("Client tests", () => {
             timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1]),
         ).toBeTruthy();
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     });
 
     test("Client runs twice and only receives filtered members from a calendar-fragmented LDES", async () => {
         // Setup client 1
         const client1 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: CALENDAR_LDES,
             urlIsView: true,
             after: new Date("2025-01-02T00:00:00.000Z"),
@@ -933,7 +1004,9 @@ describe("Client tests", () => {
         expect(client1.memberCount).toBe(3);
         expect(client1.fragmentCount).toBe(5);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -941,7 +1014,7 @@ describe("Client tests", () => {
 
         // Setup client 2
         const client2 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: CALENDAR_LDES,
             urlIsView: true,
             after: new Date("2025-01-02T00:00:00.000Z"),
@@ -994,13 +1067,15 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     })
 
     test("Client runs twice and only receives the latest version of every member in a reversed LDES", async () => {
         // Setup client 1
         const client1 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: REVERSE_LDES,
             lastVersionOnly: true,
         },
@@ -1034,7 +1109,9 @@ describe("Client tests", () => {
         expect(client1.memberCount).toBe(6);
         expect(client1.fragmentCount).toBe(4);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -1042,7 +1119,7 @@ describe("Client tests", () => {
 
         // Setup client 2
         const client2 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: REVERSE_LDES,
             lastVersionOnly: true,
         },
@@ -1090,13 +1167,15 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     })
 
     test("Client runs twice with temporal filters and only receives the latest version of every member in a reversed LDES", async () => {
         // Setup client 1
         const client1 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: REVERSE_LDES,
             after: new Date("2024-07-12T00:00:00.000Z"),
             lastVersionOnly: true,
@@ -1130,7 +1209,9 @@ describe("Client tests", () => {
         expect(client1.memberCount).toBe(6);
         expect(client1.fragmentCount).toBe(4);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -1138,7 +1219,7 @@ describe("Client tests", () => {
 
         // Setup client 2
         const client2 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: REVERSE_LDES,
             after: new Date("2024-07-12T00:00:00.000Z"),
             lastVersionOnly: true,
@@ -1189,13 +1270,15 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
     })
 
     test("Client runs twice with different conditions and throws error", async () => {
         // Setup client 1
         const client1 = replicateLDES({
-            statePath: "client-state-main",
+            ...backend.configOverrides(),
             url: REVERSE_LDES,
             after: new Date("2024-07-12T00:00:00.000Z"),
         });
@@ -1214,7 +1297,9 @@ describe("Client tests", () => {
         expect(client1.memberCount).toBe(12);
         expect(client1.fragmentCount).toBe(4);
         // Check that state was saved
-        expect(fs.existsSync("client-state-main")).toBeTruthy();
+        if (backend.persistsToFs) {
+            expect(fs.existsSync("client-state-main")).toBeTruthy();
+        }
 
         /**
          * End of client 1
@@ -1226,7 +1311,7 @@ describe("Client tests", () => {
         try {
             // Setup client 2
             client2 = replicateLDES({
-                statePath: "client-state-main",
+                ...backend.configOverrides(),
                 url: REVERSE_LDES,
                 before: new Date("2024-07-12T00:00:00.000Z"),
             });
@@ -1240,6 +1325,9 @@ describe("Client tests", () => {
 
         expect(threwError).toBeTruthy();
     })
+
+    }); // describe Storage
+    } // for backends
 
     test("Client throws error when configured SHACL shape cannot be dereferenced", async () => {
         let threwError = false;
