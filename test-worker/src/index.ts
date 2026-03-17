@@ -10,8 +10,8 @@
  *   GET  /                          — healthcheck
  */
 
-import { replicateLDES, intoConfig } from "ldes-client";
-import { DOSqliteStorage } from "ldes-client/storage/do-sqlite";
+import { replicateLDES, intoConfig } from "@inferal-oss/ldes-client";
+import { DOSqliteStorage } from "@inferal-oss/ldes-client/storage/do-sqlite";
 
 interface Env {
     LDES_STATE: DurableObjectNamespace;

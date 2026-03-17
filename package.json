@@ -1,7 +1,7 @@
 {
-  "name": "ldes-client",
+  "name": "@inferal-oss/ldes-client",
   "description": "This package provides common tooling to work with LDESes.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "main": "dist/lib/client.js",
   "exports": {
     ".": {
@@ -48,10 +48,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rdf-connect/ldes-client"
+    "url": "https://github.com/inferal-oss/ldes-client"
   },
   "author": "Arthur Vercruysse",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@treecg/types": "^0.4.6",
     "commander": "^14.0.3",

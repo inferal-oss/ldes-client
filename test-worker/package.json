@@ -9,7 +9,7 @@
     "test:preview": "PREVIEW=1 vitest run"
   },
   "dependencies": {
-    "ldes-client": "file:.."
+    "@inferal-oss/ldes-client": "file:.."
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
