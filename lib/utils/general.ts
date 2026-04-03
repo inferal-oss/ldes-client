@@ -160,6 +160,7 @@ export function memberFromQuads(
     timestampPath: Term | undefined,
     isVersionOfPath: Term | undefined,
     created?: Date,
+    sequencePath?: Term,
 ): Member {
     // Get timestamp
     let timestamp: string | Date | undefined;
@@ -177,6 +178,15 @@ export function memberFromQuads(
         }
     }
 
+    // Get sequence value
+    let sequence: string | undefined;
+    if (sequencePath) {
+        sequence = quads.find(
+            (x) =>
+                x.subject.equals(member) && x.predicate.equals(sequencePath),
+        )?.object.value;
+    }
+
     // Get isVersionof
     let isVersionOf: string | undefined;
     if (isVersionOfPath) {
@@ -190,7 +200,7 @@ export function memberFromQuads(
     const type: Term | undefined = quads.find(
         (x) => x.subject.equals(member) && x.predicate.value === RDF.type,
     )?.object;
-    return { quads, id: member, isVersionOf, timestamp, type, created };
+    return { quads, id: member, isVersionOf, timestamp, sequence, type, created };
 }
 
 export function serializeMember(member: Member): SerializedMember {
@@ -200,6 +210,7 @@ export function serializeMember(member: Member): SerializedMember {
         timestamp: member.timestamp instanceof Date
             ? member.timestamp.toISOString()
             : member.timestamp?.toString(),
+        sequence: member.sequence,
         isVersionOf: member.isVersionOf,
         type: member.type?.value,
         created: member.created?.toISOString(),
@@ -209,9 +220,10 @@ export function serializeMember(member: Member): SerializedMember {
 export function deserializeMember(serialized: SerializedMember): Member {
     let timestamp: string | Date | undefined;
     if (serialized.timestamp) {
-        try {
-            timestamp = new Date(serialized.timestamp);
-        } catch {
+        const d = new Date(serialized.timestamp);
+        if (!isNaN(d.getTime())) {
+            timestamp = d;
+        } else {
             timestamp = serialized.timestamp;
         }
     }
@@ -219,6 +231,7 @@ export function deserializeMember(serialized: SerializedMember): Member {
         id: df.namedNode(serialized.id),
         quads: new Parser().parse(serialized.quads),
         timestamp,
+        sequence: serialized.sequence,
         isVersionOf: serialized.isVersionOf,
         type: serialized.type ? df.namedNode(serialized.type) : undefined,
         created: serialized.created ? new Date(serialized.created) : undefined,

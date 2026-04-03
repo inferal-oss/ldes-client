@@ -33,6 +33,9 @@ import type { LDESInfo, Notifier, FetchedPage, Member } from "./fetcher";
 // RDF-JS data factory
 const df = new DataFactory();
 
+// ldes:sequencePath is not in @treecg/types v0.4.6, define manually
+const LDES_SEQUENCE_PATH = df.namedNode("https://w3id.org/ldes#sequencePath");
+
 // Local types
 type Controller = ReadableStreamDefaultController<Member>;
 type EventMap = Record<string, unknown>;
@@ -216,8 +219,8 @@ export class Client {
 
         this.logger.debug(`timestampPath: ${!!info.timestampPath}`);
 
-        if (this.ordered !== "none" && !info.timestampPath) {
-            throw "Can only emit members in order, if LDES is configured with timestampPath";
+        if (this.ordered !== "none" && !info.timestampPath && !info.sequencePath) {
+            throw "Can only emit members in order, if LDES is configured with timestampPath or sequencePath";
         }
 
         // Component that manages the fetching of RDF data over HTTP
@@ -279,6 +282,8 @@ export class Client {
                     this.ordered,
                     this.config.polling,
                     this.config.pollInterval,
+                    info.timestampPath,
+                    info.sequencePath,
                 )
                 : new UnorderedStrategy(
                     this.memberManager,
@@ -415,6 +420,7 @@ async function getInfo(
     let shapeIds;
     let timestampPaths;
     let versionOfPaths;
+    let sequencePaths: Term[];
 
     const isLocalDump = ldesId.value.startsWith("file://");
 
@@ -423,11 +429,13 @@ async function getInfo(
         shapeIds = config.noShape ? [] : getObjects(store, null, TREE.terms.shape);
         timestampPaths = getObjects(store, null, LDES.terms.timestampPath);
         versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
+        sequencePaths = getObjects(store, null, LDES_SEQUENCE_PATH);
     } else {
         // This is a normal LDES on the Web
         shapeIds = config.noShape ? [] : getObjects(store, ldesId, TREE.terms.shape);
         timestampPaths = getObjects(store, ldesId, LDES.terms.timestampPath);
         versionOfPaths = getObjects(store, ldesId, LDES.terms.versionOfPath);
+        sequencePaths = getObjects(store, ldesId, LDES_SEQUENCE_PATH);
     }
 
     logger.debug(
@@ -435,9 +443,10 @@ async function getInfo(
     );
 
     // Only try to dereference the view if we are not dealing with a local dump
+    // Also retry when sequencePath is missing (it might be in the view response)
     if (isLocalDump) {
         logger.debug("Ignoring view since this is a local dump");
-    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0) {
+    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0 || sequencePaths.length === 0) {
         let tryAgainUrl = viewId.value;
         if (config.urlIsView) {
             tryAgainUrl = ldesId.value;
@@ -463,6 +472,9 @@ async function getInfo(
             if (!versionOfPaths.length) {
                 versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
             }
+            if (!sequencePaths.length) {
+                sequencePaths = getObjects(store, null, LDES_SEQUENCE_PATH);
+            }
             logger.debug(
                 `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${versionOfPaths.length} isVersionOfPaths`,
             );
@@ -482,6 +494,10 @@ async function getInfo(
 
     if (versionOfPaths.length > 1) {
         logger.error(`Expected at most one versionOf path, found ${versionOfPaths.length}`);
+    }
+
+    if (sequencePaths.length > 1) {
+        logger.error(`Expected at most one sequence path, found ${sequencePaths.length}`);
     }
 
     const shapeConfigStore = RdfStore.createDefault();
@@ -519,6 +535,7 @@ async function getInfo(
         }),
         shape: config.shape ? config.shape.shapeId : shapeIds[0],
         timestampPath: timestampPaths[0],
+        sequencePath: sequencePaths[0],
         versionOfPath: versionOfPaths[0],
         shapeQuads: shapeStore.getQuads(),
     };
