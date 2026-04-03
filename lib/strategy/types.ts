@@ -37,6 +37,7 @@ export type SerializedMember = {
     id: string;
     quads: string;
     timestamp?: string;
+    sequence?: string;
     isVersionOf?: string;
     type?: string;
     created?: string;

@@ -14,6 +14,7 @@ import { Condition } from "../condition";
 import type {
     Member,
     FoundRelation,
+    RelationKind,
     RelationValue,
     FetchedPage,
     FetchEvent,
@@ -23,6 +24,7 @@ import type {
     Modulator
 } from "../fetcher";
 import type { StrategyEvents, Ordered, SerializedMember } from ".";
+import type { Term } from "@rdfjs/types";
 
 type NodeChain = {
     chain: RelationChain;
@@ -74,6 +76,9 @@ export class OrderedStrategy {
     private shouldCheckEndAgain = false;
     public processingCheckEnd = Promise.resolve();
 
+    private timestampPath?: Term;
+    private sequencePath?: Term;
+
     private logger = getLoggerFor(this);
 
     constructor(
@@ -84,8 +89,12 @@ export class OrderedStrategy {
         ordered: Ordered,
         polling: boolean,
         pollInterval?: number,
+        timestampPath?: Term,
+        sequencePath?: Term,
     ) {
         this.ordered = ordered;
+        this.timestampPath = timestampPath;
+        this.sequencePath = sequencePath;
         this.manager = memberManager;
         this.fetcher = fetcher;
         this.notifier = notifier;
@@ -232,17 +241,15 @@ export class OrderedStrategy {
                             return 0;
                         };
 
-                // Try to parse relations as dates
+                // Try to parse relations as dates (only if value looks like a date)
                 const relations = chain.relations.map((r) => {
-                    try {
+                    if (typeof r.value === "string" || typeof r.value === "number") {
                         const d = new Date(r.value);
-                        return {
-                            ...r,
-                            value: d,
-                        };
-                    } catch (e) {
-                        return r;
+                        if (!isNaN(d.getTime())) {
+                            return { ...r, value: d };
+                        }
                     }
+                    return r;
                 });
                 return {
                     chain: new RelationChain(
@@ -260,24 +267,32 @@ export class OrderedStrategy {
         );
 
         /**
-         * Member heap that determines their emission order
+         * Member heap that determines their emission order.
+         * Uses sequence as primary key when available, falling back to timestamp.
          */
+        const orderKey = (m: Member): RelationValue | undefined =>
+            m.sequence ?? m.timestamp;
+
         if (ordered == "ascending") {
             this.members = new Heap((a, b) => {
                 if (a.id.equals(b.id)) return 0;
-                if (a.timestamp == b.timestamp) return 0;
-                if (!a && b) return 1;
-                if (a && !b) return -1;
-                if (a.timestamp! < b.timestamp!) return -1;
+                const ka = orderKey(a);
+                const kb = orderKey(b);
+                if (ka == kb) return 0;
+                if (ka === undefined) return 1;
+                if (kb === undefined) return -1;
+                if (ka < kb) return -1;
                 return 1;
             });
         } else {
             this.members = new Heap((a, b) => {
                 if (a.id.equals(b.id)) return 0;
-                if (a.timestamp == b.timestamp) return 0;
-                if (!a && b) return -1;
-                if (a && !b) return 1;
-                if (a.timestamp! < b.timestamp!) return 1;
+                const ka = orderKey(a);
+                const kb = orderKey(b);
+                if (ka == kb) return 0;
+                if (ka === undefined) return -1;
+                if (kb === undefined) return 1;
+                if (ka < kb) return 1;
                 return -1;
             });
         }
@@ -432,16 +447,28 @@ export class OrderedStrategy {
      * Sorting in descending order: if a relation comes in with a GT relation, then that relation is not important, because it can be handled later
      */
     private extractRelation(rel: FoundRelation): SimpleRelation {
-        const val = (s: string) => {
+        // Check if a relation kind's tree:path matches our ordering paths
+        const pathMatches = (rk: RelationKind): "timestamp" | "sequence" | null => {
+            if (!rk.path) return null;
+            if (this.timestampPath && rk.path.equals(this.timestampPath)) return "timestamp";
+            if (this.sequencePath && rk.path.equals(this.sequencePath)) return "sequence";
+            return null;
+        };
+
+        const val = (s: string, pathIsSequence: boolean) => {
+            if (pathIsSequence) {
+                return s;
+            }
             const d = new Date(s);
             if (!isNaN(d.getTime())) {
                 return d;
             }
             return s;
         };
-        let value = undefined;
+        let value: RelationValue | undefined = undefined;
         const betweens = rel.relations
             .filter((x) => x.type.value === TREE.custom("InBetweenRelation"))
+            .filter((x) => pathMatches(x) !== null)
             .flatMap((x) => x.value || [])
             .flatMap((x) => {
                 let dataType = undefined;
@@ -485,8 +512,8 @@ export class OrderedStrategy {
         if (this.ordered === "ascending") {
             value = rel.relations
                 .filter((x) => GTRs.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value)
-                .map((a) => <undefined | number | Date>val(a.value![0].value))
+                .filter((a) => a.value && pathMatches(a) !== null)
+                .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
                 .reduce((a, b) => {
                     if (!a) return b;
                     if (!b) return a;
@@ -499,8 +526,8 @@ export class OrderedStrategy {
         } else if (this.ordered === "descending") {
             value = rel.relations
                 .filter((x) => LTR.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value)
-                .map((a) => <undefined | number | Date>val(a.value![0].value))
+                .filter((a) => a.value && pathMatches(a) !== null)
+                .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
                 .reduce((a, b) => {
                     if (!a) return b;
                     if (!b) return a;
@@ -591,8 +618,11 @@ export class OrderedStrategy {
                 marker = mostConservative!.relations[0];
             }
 
+            const formatValue = (v: RelationValue): string =>
+                v instanceof Date ? v.toISOString() : String(v);
+
             this.logger.debug("[_checkEmit] Marker found: {important: " + marker.important
-                + ", value: " + new Date(marker.value).toISOString() + "}");
+                + ", value: " + formatValue(marker.value) + "}");
 
             // A relation should only be blocked by PEER branches that are in transit.
             // It should NOT be blocked by its own descendants or by itself.
@@ -617,24 +647,38 @@ export class OrderedStrategy {
             // Proceed to emit some members in order
             let member = this.members.pop();
             while (member) {
-                // Euhm yeah, what to do if there is no timestamp?
-                if (!member.timestamp) {
-                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no timestamp, emitting it anyway");
-                    const streamed = this.notifier.member(member, {}) as boolean;
-                    if (streamed) {
-                        await this.modulator.addEmitted(member.id.value)
-                    }
+                // Determine which member field to compare against the marker.
+                // Use the same type as the marker: string markers match sequence, Date markers match timestamp.
+                let memberOrderValue: RelationValue | undefined;
+                if (marker.value instanceof Date) {
+                    memberOrderValue = member.timestamp;
+                } else if (typeof marker.value === "string") {
+                    memberOrderValue = member.sequence;
+                } else {
+                    memberOrderValue = member.timestamp;
+                }
+
+                // Cross-type comparison safety: if the member doesn't have a value
+                // of the same type as the marker (e.g., member has no sequence but
+                // marker is a string), we can't meaningfully compare. Emit the member
+                // rather than blocking it — it came from a fetched page and is valid.
+                const canCompare = memberOrderValue !== undefined &&
+                    ((typeof memberOrderValue === typeof marker.value) ||
+                     (memberOrderValue instanceof Date && marker.value instanceof Date));
+
+                if (memberOrderValue === undefined || !canCompare) {
+                    await this.emitIfNotOld(member);
                 } else if (
                     !marker.important || (
                         this.ordered == "ascending"
-                            ? (member.timestamp) < (marker.value)
-                            : (member.timestamp) > (marker.value)
+                            ? memberOrderValue < marker.value
+                            : memberOrderValue > marker.value
                     )
                 ) {
                     await this.emitIfNotOld(member);
                 } else {
-                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with timestamp "
-                        + (member.timestamp as Date).toISOString() + " didn't fit in the marker range");
+                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with value "
+                        + formatValue(memberOrderValue) + " didn't fit in the marker range");
                     break;
                 }
                 member = this.members.pop();
