@@ -14,8 +14,8 @@ import { Condition } from "../condition";
 import type {
     Member,
     FoundRelation,
-    RelationKind,
     RelationValue,
+    LDESInfo,
     FetchedPage,
     FetchEvent,
     Notifier,
@@ -24,7 +24,6 @@ import type {
     Modulator
 } from "../fetcher";
 import type { StrategyEvents, Ordered, SerializedMember } from ".";
-import type { Term } from "@rdfjs/types";
 
 type NodeChain = {
     chain: RelationChain;
@@ -49,6 +48,7 @@ export class OrderedStrategy {
     private readonly launchedRelations: Heap<RelationChain>;
 
     private modulator: Modulator<NodeChain, Member>;
+    private preloadedPages = new Map<string, FetchedPage>();
     private fetchNotifier: Notifier<
         FetchEvent,
         { chain: RelationChain; index: number }
@@ -67,6 +67,7 @@ export class OrderedStrategy {
     private polling: boolean;
     private toPoll: Heap<NodeChain>;
     private pollInterval?: number;
+    private orderingPathKeys: Set<string>;
 
     private canceled = false;
     private isEmitChecking = false;
@@ -76,9 +77,6 @@ export class OrderedStrategy {
     private shouldCheckEndAgain = false;
     public processingCheckEnd = Promise.resolve();
 
-    private timestampPath?: Term;
-    private sequencePath?: Term;
-
     private logger = getLoggerFor(this);
 
     constructor(
@@ -86,20 +84,21 @@ export class OrderedStrategy {
         fetcher: Fetcher,
         notifier: Notifier<StrategyEvents, unknown>,
         factory: ModulatorFactory,
+        info: LDESInfo,
         ordered: Ordered,
         polling: boolean,
         pollInterval?: number,
-        timestampPath?: Term,
-        sequencePath?: Term,
     ) {
         this.ordered = ordered;
-        this.timestampPath = timestampPath;
-        this.sequencePath = sequencePath;
         this.manager = memberManager;
         this.fetcher = fetcher;
         this.notifier = notifier;
         this.polling = polling;
         this.pollInterval = pollInterval;
+        this.orderingPathKeys = new Set([
+            info.timestampPathKey,
+            info.sequencePathKey,
+        ].filter((value): value is string => value !== undefined));
 
         this.toPoll = new Heap((a, b) => a.chain.ordering(b.chain));
         this.launchedRelations = new Heap((a, b) => a.ordering(b));
@@ -203,11 +202,22 @@ export class OrderedStrategy {
                 ready: async ({ item: { chain, expected }, index }) => {
                     if (!(await this.modulator.seen(chain.target))) {
                         this.logger.debug(`[modulator - ready] Ready to fetch page: ${chain.target}`);
-                        await this.fetcher.fetch(
-                            { target: chain.target, expected },
-                            { chain, index },
-                            this.fetchNotifier,
-                        );
+                        const preloadedPage = this.preloadedPages.get(chain.target);
+                        if (preloadedPage) {
+                            this.preloadedPages.delete(chain.target);
+                            await this.fetcher.processFetchedPage(
+                                { target: chain.target, expected },
+                                preloadedPage,
+                                { chain, index },
+                                this.fetchNotifier,
+                            );
+                        } else {
+                            await this.fetcher.fetch(
+                                { target: chain.target, expected },
+                                { chain, index },
+                                this.fetchNotifier,
+                            );
+                        }
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
                         await this.modulator.finished(index);
@@ -241,16 +251,11 @@ export class OrderedStrategy {
                             return 0;
                         };
 
-                // Try to parse relations as dates (only if value looks like a date)
-                const relations = chain.relations.map((r) => {
-                    if (typeof r.value === "string" || typeof r.value === "number") {
-                        const d = new Date(r.value);
-                        if (!isNaN(d.getTime())) {
-                            return { ...r, value: d };
-                        }
-                    }
-                    return r;
-                });
+                // Try to parse relations as dates
+                const relations = chain.relations.map((r) => ({
+                    ...r,
+                    value: parseRelationValue(r.value),
+                }));
                 return {
                     chain: new RelationChain(
                         chain.source,
@@ -266,39 +271,16 @@ export class OrderedStrategy {
             (member) => deserializeMember(member as SerializedMember),
         );
 
-        /**
-         * Member heap that determines their emission order.
-         * Uses sequence as primary key when available, falling back to timestamp.
-         */
-        const orderKey = (m: Member): RelationValue | undefined =>
-            m.sequence ?? m.timestamp;
-
-        if (ordered == "ascending") {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                const ka = orderKey(a);
-                const kb = orderKey(b);
-                if (ka == kb) return 0;
-                if (ka === undefined) return 1;
-                if (kb === undefined) return -1;
-                if (ka < kb) return -1;
-                return 1;
-            });
-        } else {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                const ka = orderKey(a);
-                const kb = orderKey(b);
-                if (ka == kb) return 0;
-                if (ka === undefined) return -1;
-                if (kb === undefined) return 1;
-                if (ka < kb) return 1;
-                return -1;
-            });
-        }
+        /** Member heap that determines emission order. */
+        this.members = new Heap((a, b) => compareMembers(a, b, ordered));
     }
 
-    async start(url: string, condition: Condition, root?: FetchedPage) {
+    async start(
+        url: string,
+        condition: Condition,
+        root?: FetchedPage,
+        traverseRoot = true,
+    ) {
         if (this.canceled) return;
         // Try to initialize the modulator
         if (!(await this.modulator.init(condition))) return;
@@ -317,8 +299,7 @@ export class OrderedStrategy {
             this.toPoll.push(fragment);
         });
 
-        if (root) {
-            // This is a local dump. Proceed to extract members
+        if (root && !traverseRoot) {
             this.manager.extractMembers(
                 root,
                 {
@@ -328,7 +309,12 @@ export class OrderedStrategy {
                 },
                 this.memberNotifier
             );
-        } else if (await this.modulator.pendingCount() < 1) {
+            return;
+        } else if (root) {
+            this.preloadedPages.set(root.url, root);
+        }
+
+        if (await this.modulator.pendingCount() < 1) {
             this.logger.debug(`[start] Starting at ${url}`);
 
             // Setting comparator functions for relations
@@ -447,28 +433,12 @@ export class OrderedStrategy {
      * Sorting in descending order: if a relation comes in with a GT relation, then that relation is not important, because it can be handled later
      */
     private extractRelation(rel: FoundRelation): SimpleRelation {
-        // Check if a relation kind's tree:path matches our ordering paths
-        const pathMatches = (rk: RelationKind): "timestamp" | "sequence" | null => {
-            if (!rk.path) return null;
-            if (this.timestampPath && rk.path.equals(this.timestampPath)) return "timestamp";
-            if (this.sequencePath && rk.path.equals(this.sequencePath)) return "sequence";
-            return null;
-        };
-
-        const val = (s: string, pathIsSequence: boolean) => {
-            if (pathIsSequence) {
-                return s;
-            }
-            const d = new Date(s);
-            if (!isNaN(d.getTime())) {
-                return d;
-            }
-            return s;
+        const val = (s: string) => {
+            return parseRelationValue(s);
         };
         let value: RelationValue | undefined = undefined;
         const betweens = rel.relations
             .filter((x) => x.type.value === TREE.custom("InBetweenRelation"))
-            .filter((x) => pathMatches(x) !== null)
             .flatMap((x) => x.value || [])
             .flatMap((x) => {
                 let dataType = undefined;
@@ -512,8 +482,9 @@ export class OrderedStrategy {
         if (this.ordered === "ascending") {
             value = rel.relations
                 .filter((x) => GTRs.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value && pathMatches(a) !== null)
-                .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
+                .filter((x) => this.matchesOrderingPath(x))
+                .filter((a) => a.value)
+                .map((a) => <undefined | number | Date>val(a.value![0].value))
                 .reduce((a, b) => {
                     if (!a) return b;
                     if (!b) return a;
@@ -526,8 +497,9 @@ export class OrderedStrategy {
         } else if (this.ordered === "descending") {
             value = rel.relations
                 .filter((x) => LTR.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value && pathMatches(a) !== null)
-                .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
+                .filter((x) => this.matchesOrderingPath(x))
+                .filter((a) => a.value)
+                .map((a) => <undefined | number | Date>val(a.value![0].value))
                 .reduce((a, b) => {
                     if (!a) return b;
                     if (!b) return a;
@@ -549,6 +521,10 @@ export class OrderedStrategy {
                 value: 0,
             };
         }
+    }
+
+    private matchesOrderingPath(relation: FoundRelation["relations"][number]): boolean {
+        return relation.pathKey !== undefined && this.orderingPathKeys.has(relation.pathKey);
     }
 
     private async handleFetched(page: FetchedPage, state: { chain: RelationChain, index: number }) {
@@ -647,38 +623,27 @@ export class OrderedStrategy {
             // Proceed to emit some members in order
             let member = this.members.pop();
             while (member) {
-                // Determine which member field to compare against the marker.
-                // Use the same type as the marker: string markers match sequence, Date markers match timestamp.
-                let memberOrderValue: RelationValue | undefined;
-                if (marker.value instanceof Date) {
-                    memberOrderValue = member.timestamp;
-                } else if (typeof marker.value === "string") {
-                    memberOrderValue = member.sequence;
-                } else {
-                    memberOrderValue = member.timestamp;
-                }
+                const comparable = member.order !== undefined && (
+                    (member.order instanceof Date && marker.value instanceof Date) ||
+                    (!(member.order instanceof Date) &&
+                        !(marker.value instanceof Date) &&
+                        typeof member.order === typeof marker.value)
+                );
 
-                // Cross-type comparison safety: if the member doesn't have a value
-                // of the same type as the marker (e.g., member has no sequence but
-                // marker is a string), we can't meaningfully compare. Emit the member
-                // rather than blocking it — it came from a fetched page and is valid.
-                const canCompare = memberOrderValue !== undefined &&
-                    ((typeof memberOrderValue === typeof marker.value) ||
-                     (memberOrderValue instanceof Date && marker.value instanceof Date));
-
-                if (memberOrderValue === undefined || !canCompare) {
+                if (!comparable) {
+                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no comparable ordering value, emitting it anyway");
                     await this.emitIfNotOld(member);
                 } else if (
                     !marker.important || (
                         this.ordered == "ascending"
-                            ? memberOrderValue < marker.value
-                            : memberOrderValue > marker.value
+                            ? member.order! < marker.value
+                            : member.order! > marker.value
                     )
                 ) {
                     await this.emitIfNotOld(member);
                 } else {
-                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with value "
-                        + formatValue(memberOrderValue) + " didn't fit in the marker range");
+                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with ordering value "
+                        + String(member.order) + " didn't fit in the marker range");
                     break;
                 }
                 member = this.members.pop();
@@ -725,4 +690,48 @@ export class OrderedStrategy {
             await this.modulator.deleteUnemitted(member.id.value);
         }
     }
+}
+
+function parseRelationValue(value: RelationValue): RelationValue {
+    if (typeof value !== "string") {
+        return value;
+    }
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+        return numeric;
+    }
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+        return date;
+    }
+    return value;
+}
+
+function compareMembers(a: Member, b: Member, ordered: Ordered): number {
+    if (a.id.equals(b.id)) return 0;
+    let order = compareOrderValues(a.order, b.order);
+    if (order === 0 && a.timestamp !== undefined && b.timestamp !== undefined) {
+        order = compareOrderValues(a.sequence, b.sequence);
+    }
+    if (order !== 0) {
+        return ordered === "ascending" ? order : -order;
+    }
+    if (a.transactionFinalized !== b.transactionFinalized) {
+        return a.transactionFinalized ? 1 : -1;
+    }
+    return a.id.value < b.id.value ? -1 : 1;
+}
+
+function compareOrderValues(
+    a: string | Date | number | undefined,
+    b: string | Date | number | undefined,
+): number {
+    if (a === undefined && b === undefined) return 0;
+    if (a === undefined) return 1;
+    if (b === undefined) return -1;
+    const left = a instanceof Date ? a.getTime() : a;
+    const right = b instanceof Date ? b.getTime() : b;
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
 }

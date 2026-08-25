@@ -18,8 +18,17 @@ export function createLineBufferedFetch(baseFetch?: typeof fetch): typeof fetch 
             return response;
         }
 
-        // Check if we're in a Node.js environment
-        const isNode = typeof process !== "undefined" && process.versions && process.versions.node;
+        // Cloudflare Workers expose a Node-compatible `process` shim when
+        // nodejs_compat is enabled, but their Response bodies are still native
+        // web streams and must not be passed through Node stream adapters.
+        const isCloudflareWorker =
+            typeof navigator !== "undefined" &&
+            navigator.userAgent === "Cloudflare-Workers";
+        const isNode =
+            !isCloudflareWorker &&
+            typeof process !== "undefined" &&
+            process.versions &&
+            process.versions.node;
 
         if (isNode) {
             // In Node.js, convert web stream to Node stream and apply buffer
