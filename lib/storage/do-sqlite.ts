@@ -14,8 +14,10 @@ import type { KVStore, Storage } from "./index";
  * Minimal typing for the Durable Object storage SQL interface.
  * Avoids a hard dependency on @cloudflare/workers-types at runtime.
  */
+type SqlStorageValue = ArrayBuffer | string | number | null;
+
 interface SqlStorage {
-    exec<T = Record<string, unknown>>(query: string, ...bindings: unknown[]): SqlCursor<T>;
+    exec<T extends Record<string, SqlStorageValue> = Record<string, SqlStorageValue>>(query: string, ...bindings: unknown[]): SqlCursor<T>;
 }
 
 interface SqlCursor<T> {
@@ -97,7 +99,7 @@ export class DOSqliteStorage implements Storage {
 
     constructor(storage: DOStorage, table = "ldes_client_storage") {
         this.sql = storage.sql;
-        this.table = table.replace(/"/g, '""');
+        this.table = table.replace(/"/g, "\"\"");
         this.sql.exec(
             `CREATE TABLE IF NOT EXISTS "${this.table}" (store TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (store, key))`
         );
