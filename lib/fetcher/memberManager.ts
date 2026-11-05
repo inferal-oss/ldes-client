@@ -20,6 +20,7 @@ export interface Member {
     id: Term;
     quads: Quad[];
     timestamp?: string | Date;
+    sequence?: string;
     isVersionOf?: string;
     type?: Term;
     created?: Date;
@@ -30,6 +31,7 @@ export type LDESInfo = {
     shapeQuads: Quad[];
     extractor: CBDShapeExtractor;
     timestampPath?: Term;
+    sequencePath?: Term;
     versionOfPath?: Term;
 };
 
@@ -58,6 +60,7 @@ export class Manager {
     private shapeId?: Term;
 
     private timestampPath?: Term;
+    private sequencePath?: Term;
     private isVersionOfPath?: Term;
 
     private logger = getLoggerFor(this);
@@ -74,6 +77,7 @@ export class Manager {
         this.ldesUri = ldesUri;
         this.extractor = info.extractor;
         this.timestampPath = info.timestampPath;
+        this.sequencePath = info.sequencePath;
         this.isVersionOfPath = info.versionOfPath;
         this.shapeId = info.shape;
         this.loose = loose;
@@ -201,13 +205,24 @@ export class Manager {
             )[0]?.value;
 
             if (quads.length > 0) {
-                return memberFromQuads(
+                const m = memberFromQuads(
                     member,
                     quads,
                     this.timestampPath,
                     this.isVersionOfPath,
                     created ? new Date(created) : undefined,
+                    this.sequencePath,
                 );
+
+                // If the sequence value wasn't in the shape-extracted quads,
+                // try extracting it from the full page data. The SHACL shape
+                // may not include the sequencePath property, but we need it
+                // for ordered emission when tree relations use sequencePath.
+                if (m.sequence === undefined && this.sequencePath) {
+                    m.sequence = getObjects(data, member, this.sequencePath, null)[0]?.value;
+                }
+
+                return m;
             }
         } catch (ex) {
             this.logger.error((<Error>ex).message);

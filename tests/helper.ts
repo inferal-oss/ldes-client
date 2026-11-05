@@ -109,14 +109,17 @@ export class Tree<T> {
     private fragments: Fragment<T>[] = [];
     private memberToQuads: (id: string, member: T) => Quad[];
     private timestampPath?: string;
+    private sequencePath?: string;
 
     fetched: Set<string> = new Set();
 
     constructor(
         memberToQuads: (id: string, member: T) => Quad[],
         timestampPath?: string,
+        sequencePath?: string,
     ) {
         this.timestampPath = timestampPath;
+        this.sequencePath = sequencePath;
         this.memberToQuads = memberToQuads;
         this.fragments.push(new Fragment());
     }
@@ -152,13 +155,16 @@ export class Tree<T> {
             const quads: Quad[] = [];
 
             if (req.toString() === BASE + this.root()) {
-                const path = this.timestampPath
+                const tsPath = this.timestampPath
                     ? ` <https://w3id.org/ldes#timestampPath> <${this.timestampPath}>;`
+                    : "";
+                const seqPath = this.sequencePath
+                    ? ` <https://w3id.org/ldes#sequencePath> <${this.sequencePath}>;`
                     : "";
 
                 quads.push(
                     ...new Parser().parse(`
-<> ${path}
+<> ${tsPath} ${seqPath}
   <https://w3id.org/tree#view> <>.
 `),
                 );
