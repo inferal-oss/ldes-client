@@ -189,9 +189,9 @@ export class ModulatorFactory {
         lastVersionOnly?: boolean,
     ) {
         this.clientStateManager = clientStateManager;
-        this.saveState = saveState!!;
+        this.saveState = saveState!;
         this.concurrent = concurrent || 10;
-        this.lastVersionOnly = lastVersionOnly!!;
+        this.lastVersionOnly = lastVersionOnly!;
     }
 
     create<F, M>(
@@ -542,14 +542,14 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
     */
     async filterLatest(memberId: string, version: number): Promise<boolean> {
         // If things are shutting down, relay back that we must not emit new notifications
-        if (this.closed) throw new Error('Modulator is closed');
+        if (this.closed) throw new Error("Modulator is closed");
         return this.withState<boolean>(false, async (st) => {
             const { latestVersions } = st;
             // If version state is not being tracked, then this member can't be filtered as an old one
             if (!latestVersions) return false;
             const p = this.versionStateSync.then(async () => {
                 // Again, if things are shutting down, relay back that we must not emit new notifications
-                if (this.closed) throw new Error('Modulator is closed');
+                if (this.closed) throw new Error("Modulator is closed");
                 const latestVersion = await latestVersions.get(memberId);
                 if (latestVersion === undefined || version > latestVersion) {
                     // This member is a newer version

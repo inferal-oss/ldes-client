@@ -319,7 +319,7 @@ export class OrderedStrategy {
         if (unemitted.length > 0) {
             this.logger.debug(`[start] Found ${unemitted.length} unemitted members in the saved state`);
             await Promise.all(unemitted.map(async (member) => {
-                await this.members.push(member)
+                await this.members.push(member);
             }));
         }
 
@@ -649,7 +649,7 @@ export class OrderedStrategy {
                     (!x.expected.has(head!.target) && x.chain.target !== head!.target) :
                     true
                 )
-            )
+            );
 
             if (inTransit) {
                 this.logger.debug("[_checkEmit] In transit (blocking): " + inTransit?.chain.target);
@@ -705,7 +705,7 @@ export class OrderedStrategy {
     }
 
     private async emitIfNotOld(member: Member) {
-        let isOld = false;
+        let isOld: boolean;
         try {
             // In the ordered strategy, we need to check again if this is an older version of the member
             // when emitting latest versions only, because older versions might have been fetched and queued
@@ -722,7 +722,7 @@ export class OrderedStrategy {
             const streamed = this.notifier.member(member, {}) as boolean;
             if (streamed) {
                 // We need this check in case the client is shut down while emitting
-                await this.modulator.addEmitted(memberIri)
+                await this.modulator.addEmitted(memberIri);
             }
         } else {
             // Remove member from unemitted list as a newer version was already available/emitted
