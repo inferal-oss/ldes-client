@@ -15,9 +15,17 @@ const externals = [
 ];
 
 export default {
-    input: './dist/lib/client.js',
+    input: {
+        client: './dist/lib/client.js',
+        'storage/index': './dist/lib/storage/index.js',
+        'storage/level': './dist/lib/storage/level.js',
+        'storage/memory': './dist/lib/storage/memory.js',
+        'storage/do-sqlite': './dist/lib/storage/do-sqlite.js',
+    },
     output: {
-        file: './dist/lib/client.cjs',
+        dir: './dist/lib',
+        entryFileNames: '[name].cjs',
+        chunkFileNames: 'chunks/[name]-[hash].cjs',
         format: 'cjs',
     },
     plugins: [
@@ -34,10 +42,6 @@ export default {
                         /const name = "winston";\s*const m = await import\(.*?name\)/g,
                         'const m = require("winston")'
                     );
-                    changed = true;
-                }
-                if (id.includes('state')) {
-                    transformed = transformed.replace(/await import\(['"]\.\/(storage\/level)(?:\.js)?['"]\)/g, 'require("./$1")');
                     changed = true;
                 }
                 if (changed) {

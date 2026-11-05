@@ -31,6 +31,12 @@ type NodeChain = {
     expected: Set<string>;
 }
 
+type StoredRelation = {
+    important: boolean;
+    value: string | number;
+    valueType?: "date" | "raw";
+};
+
 export class OrderedStrategy {
     private members: Heap<Member>;
 
@@ -219,13 +225,21 @@ export class OrderedStrategy {
             (inp: NodeChain) => {
                 // Serialize: Convert Set to Array for JSON storage
                 return {
-                    chain: inp.chain,
+                    chain: {
+                        source: inp.chain.source,
+                        target: inp.chain.target,
+                        relations: inp.chain.relations.map((relation) => ({
+                            important: relation.important,
+                            value: relation.value instanceof Date ? relation.value.toISOString() : relation.value,
+                            valueType: relation.value instanceof Date ? "date" : "raw",
+                        })),
+                    },
                     expected: Array.from(inp.expected),
                 };
             },
             (inp: unknown) => {
                 const { chain, expected } = <{
-                    chain: RelationChain;
+                    chain: { source: string; target: string; relations: StoredRelation[] };
                     expected: string[];
                 }>inp;
                 const cmp =
@@ -241,15 +255,24 @@ export class OrderedStrategy {
                             return 0;
                         };
 
-                // Try to parse relations as dates (only if value looks like a date)
+                // New state records value types explicitly. Legacy timestamp state
+                // used ISO strings; sequence values must never be guessed as dates.
                 const relations = chain.relations.map((r) => {
-                    if (typeof r.value === "string" || typeof r.value === "number") {
-                        const d = new Date(r.value);
-                        if (!isNaN(d.getTime())) {
-                            return { ...r, value: d };
+                    const legacyDate = r.valueType === undefined && !this.sequencePath
+                        && typeof r.value === "string"
+                        && /^[+-]?\d{4,6}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(r.value);
+                    if (r.valueType === "date" || legacyDate) {
+                        const date = new Date(r.value);
+                        if (!isNaN(date.getTime())) {
+                            return { important: r.important, value: date };
                         }
                     }
-                    return r;
+                    return {
+                        // Legacy state with both paths cannot identify which
+                        // path a marker belonged to. Traverse it conservatively.
+                        important: r.important && !(r.valueType === undefined && this.timestampPath && this.sequencePath),
+                        value: r.value,
+                    };
                 });
                 return {
                     chain: new RelationChain(
@@ -266,36 +289,24 @@ export class OrderedStrategy {
             (member) => deserializeMember(member as SerializedMember),
         );
 
-        /**
-         * Member heap that determines their emission order.
-         * Uses sequence as primary key when available, falling back to timestamp.
-         */
-        const orderKey = (m: Member): RelationValue | undefined =>
-            m.sequence ?? m.timestamp;
-
-        if (ordered == "ascending") {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                const ka = orderKey(a);
-                const kb = orderKey(b);
-                if (ka == kb) return 0;
-                if (ka === undefined) return 1;
-                if (kb === undefined) return -1;
-                if (ka < kb) return -1;
-                return 1;
-            });
-        } else {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                const ka = orderKey(a);
-                const kb = orderKey(b);
-                if (ka == kb) return 0;
-                if (ka === undefined) return -1;
-                if (kb === undefined) return 1;
-                if (ka < kb) return 1;
-                return -1;
-            });
-        }
+        // LDES chronological order is timestamp first, then sequence for ties.
+        // With no timestamp path, sequence defines the stream's order.
+        const compare = (a: RelationValue | undefined, b: RelationValue | undefined) => {
+            if (a === undefined) return b === undefined ? 0 : 1;
+            if (b === undefined) return -1;
+            return a < b ? -1 : a > b ? 1 : 0;
+        };
+        const direction = ordered === "ascending" ? 1 : -1;
+        this.members = new Heap((a, b) => {
+            if (a.id.equals(b.id)) return 0;
+            const primary = this.timestampPath
+                ? compare(a.timestamp, b.timestamp)
+                : compare(a.sequence, b.sequence);
+            const secondary = this.timestampPath
+                ? compare(a.sequence, b.sequence)
+                : compare(a.timestamp, b.timestamp);
+            return direction * (primary || secondary);
+        });
     }
 
     async start(url: string, condition: Condition, root?: FetchedPage) {
@@ -450,7 +461,8 @@ export class OrderedStrategy {
         // Check if a relation kind's tree:path matches our ordering paths
         const pathMatches = (rk: RelationKind): "timestamp" | "sequence" | null => {
             if (!rk.path) return null;
-            if (this.timestampPath && rk.path.equals(this.timestampPath)) return "timestamp";
+            // The boundary and member heap must use the same primary path.
+            if (this.timestampPath) return rk.path.equals(this.timestampPath) ? "timestamp" : null;
             if (this.sequencePath && rk.path.equals(this.sequencePath)) return "sequence";
             return null;
         };
@@ -468,7 +480,7 @@ export class OrderedStrategy {
         let value: RelationValue | undefined = undefined;
         const betweens = rel.relations
             .filter((x) => x.type.value === TREE.custom("InBetweenRelation"))
-            .filter((x) => pathMatches(x) !== null)
+            .filter((x) => pathMatches(x) === "timestamp")
             .flatMap((x) => x.value || [])
             .flatMap((x) => {
                 let dataType = undefined;
@@ -486,8 +498,8 @@ export class OrderedStrategy {
             value = betweens
                 .map((x) => <undefined | number | Date>x.min)
                 .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
+                    if (a === undefined) return b;
+                    if (b === undefined) return a;
                     if (a > b) {
                         return b;
                     } else {
@@ -499,8 +511,8 @@ export class OrderedStrategy {
             value = betweens
                 .map((x) => <undefined | number | Date>x.max)
                 .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
+                    if (a === undefined) return b;
+                    if (b === undefined) return a;
                     if (a > b) {
                         return a;
                     } else {
@@ -512,11 +524,11 @@ export class OrderedStrategy {
         if (this.ordered === "ascending") {
             value = rel.relations
                 .filter((x) => GTRs.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value && pathMatches(a) !== null)
+                .filter((a) => a.value?.length && pathMatches(a) !== null)
                 .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
                 .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
+                    if (a === undefined) return b;
+                    if (b === undefined) return a;
                     if (a > b) {
                         return b;
                     } else {
@@ -526,11 +538,11 @@ export class OrderedStrategy {
         } else if (this.ordered === "descending") {
             value = rel.relations
                 .filter((x) => LTR.some((gr) => x.type.value === gr.value))
-                .filter((a) => a.value && pathMatches(a) !== null)
+                .filter((a) => a.value?.length && pathMatches(a) !== null)
                 .map((a) => <undefined | number | Date | string>val(a.value![0].value, pathMatches(a) === "sequence"))
                 .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
+                    if (a === undefined) return b;
+                    if (b === undefined) return a;
                     if (a > b) {
                         return a;
                     } else {
@@ -647,16 +659,8 @@ export class OrderedStrategy {
             // Proceed to emit some members in order
             let member = this.members.pop();
             while (member) {
-                // Determine which member field to compare against the marker.
-                // Use the same type as the marker: string markers match sequence, Date markers match timestamp.
-                let memberOrderValue: RelationValue | undefined;
-                if (marker.value instanceof Date) {
-                    memberOrderValue = member.timestamp;
-                } else if (typeof marker.value === "string") {
-                    memberOrderValue = member.sequence;
-                } else {
-                    memberOrderValue = member.timestamp;
-                }
+                // Use the same primary path as relation extraction and the heap.
+                const memberOrderValue = this.timestampPath ? member.timestamp : member.sequence;
 
                 // Cross-type comparison safety: if the member doesn't have a value
                 // of the same type as the marker (e.g., member has no sequence but
