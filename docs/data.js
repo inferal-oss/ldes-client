@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793896692675,
+  "lastUpdate": 1793918239052,
   "repoUrl": "https://github.com/inferal-oss/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -93,6 +93,37 @@ window.BENCHMARK_DATA = {
             "range": "±4.62%",
             "unit": "ops/sec",
             "extra": "32 samples"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yrashk@gmail.com",
+            "name": "Yurii Rashkovskii",
+            "username": "yrashk"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35c35e150120e379368b97e1ff0f0390105adbe1",
+          "message": "Merge pull request #4 from inferal-oss/sync/upstream-main\n\nSync upstream ldes-client main into the Inferal fork",
+          "timestamp": "2026-11-05T14:35:40-08:00",
+          "tree_id": "0cbf8f592e60abd5eaa72a6e2fae3eaf646ac5e3",
+          "url": "https://github.com/inferal-oss/ldes-client/commit/35c35e150120e379368b97e1ff0f0390105adbe1"
+        },
+        "date": 1793918238224,
+        "tool": "benchmarkjs",
+        "benches": [
+          {
+            "name": "tree-3-3",
+            "value": 5.92,
+            "range": "±3.02%",
+            "unit": "ops/sec",
+            "extra": "34 samples"
           }
         ]
       }
