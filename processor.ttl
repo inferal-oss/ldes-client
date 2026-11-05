@@ -59,6 +59,16 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:path rdfc:auth;
     sh:name "auth";
     sh:maxCount 1;
+  ], [
+    sh:datatype xsd:string;
+    sh:path rdfc:header;
+    sh:name "header";
+    sh:maxCount 1;
+  ], [
+    sh:datatype xsd:string;
+    sh:path rdfc:value;
+    sh:name "value";
+    sh:maxCount 1;
   ].
 
 [ ] a sh:NodeShape;

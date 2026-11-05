@@ -93,4 +93,40 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(proc.streamId).toBe("MyStream");
         expect(proc.sdsify).toBeTruthy();
     });
+
+    test("rdfc:LdesClient with header auth is properly defined", async () => {
+        const processor = `
+        @prefix rdfc: <https://w3id.org/rdf-connect#>.
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+        <http://example.com/ns#headerProcessor> a rdfc:LdesClient;
+            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfc:output <jw>;
+            rdfc:fetch [
+                rdfc:auth [
+                    rdfc:type "header";
+                    rdfc:header "Authorization";
+                    rdfc:value "Bearer mytoken"
+                ]
+            ].
+        `;
+
+        const configLocation = process.cwd() + "/processor.ttl";
+
+        const procHelper = new ProcHelper<FullProc<LDESClientProcessor>>();
+        await procHelper.importFile(configLocation);
+        await procHelper.importInline("pipeline-header.ttl", processor);
+
+        procHelper.getConfig("LdesClient");
+
+        const proc: FullProc<LDESClientProcessor> = await procHelper.getProcessor("http://example.com/ns#headerProcessor");
+
+        expect(proc).toBeDefined();
+        expect(proc.fetchConfig).toBeDefined();
+        expect(proc.fetchConfig!.auth).toEqual({
+            type: "header",
+            header: "Authorization",
+            value: "Bearer mytoken",
+        });
+    });
 });

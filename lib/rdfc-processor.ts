@@ -3,7 +3,8 @@ import { DataFactory } from "rdf-data-factory";
 import { SDS } from "@treecg/types";
 import { Writer as NWriter } from "n3";
 import { Client, replicateLDES, intoConfig, processConditionFile } from "./client";
-import { enhanced_fetch } from "./fetcher"
+import { enhanced_fetch } from "./fetcher";
+import type { AuthConfig } from "./fetcher";
 import { Logger } from "winston";
 
 import type { Quad_Object } from "@rdfjs/types";
@@ -25,11 +26,7 @@ type LDESClientArgs = {
     loose?: boolean;
     urlIsView?: boolean;
     fetchConfig?: {
-        auth?: {
-            type: "basic";
-            auth: string;
-            host: string;
-        };
+        auth?: AuthConfig;
         concurrent?: number;
         retry?: {
             codes: number[];
