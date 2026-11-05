@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793865789865,
+  "lastUpdate": 1793896692675,
   "repoUrl": "https://github.com/inferal-oss/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -62,6 +62,37 @@ window.BENCHMARK_DATA = {
             "range": "±4.08%",
             "unit": "ops/sec",
             "extra": "31 samples"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yrashk@gmail.com",
+            "name": "Yurii Rashkovskii",
+            "username": "yrashk"
+          },
+          "committer": {
+            "email": "yrashk@gmail.com",
+            "name": "Yurii Rashkovskii",
+            "username": "yrashk"
+          },
+          "distinct": true,
+          "id": "fe650dc1e2feaf8aa797c991378d5deb9bbbe5a1",
+          "message": "Add changelog for Inferal fork releases",
+          "timestamp": "2026-11-05T08:36:52-08:00",
+          "tree_id": "6e33beb98c7b8dc2fd347708fc2beed74a911bfe",
+          "url": "https://github.com/inferal-oss/ldes-client/commit/fe650dc1e2feaf8aa797c991378d5deb9bbbe5a1"
+        },
+        "date": 1793896691925,
+        "tool": "benchmarkjs",
+        "benches": [
+          {
+            "name": "tree-3-3",
+            "value": 5.55,
+            "range": "±4.62%",
+            "unit": "ops/sec",
+            "extra": "32 samples"
           }
         ]
       }
