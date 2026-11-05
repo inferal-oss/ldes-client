@@ -6,6 +6,49 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Upstream:** RDF-Connect pipelines accept IRIs for the stream URL and for
+  shape, state, and condition file locations. Relative file IRIs resolve
+  against the pipeline. ([upstream #154])
+
+### Changed
+
+- **Upstream:** The RDF-Connect processor schema separates code identifiers from
+  display labels and supplies descriptions, allowed values, and defaults.
+  The sync was tested with RDF-Connect JS runner 3.4.0. Runner 3.0.2 cannot
+  load the updated processor configuration. ([upstream sync], [upstream #154])
+- **Upstream:** The default polling interval increases from 200 ms to 1,000 ms.
+  Set `pollInterval`, `--poll-interval`, or the pipeline’s `rdfc:interval`
+  to 200 ms to keep the previous cadence.
+  ([upstream #154])
+- **Upstream:** Updated the RDF parser to N3 2, the dereferencer to
+  `rdf-dereference` 5, and the SHACL lens library to `rdf-lens` 2. Also
+  updated the shape extractor, RDF store, and CLI dependencies. The locked
+  runtime dependencies require Node.js 22.19.0 or newer. The sync was tested
+  on Node.js 24. ([upstream sync])
+- **Upstream:** Updated the build, lint, and browser test tooling, including
+  TypeScript 6 and package export resolution. The performance test workflow
+  now uses Node.js 24. ([upstream sync], [upstream #157])
+
+### Fixed
+
+- **Upstream:** Cancel LDES fetching when the downstream RDF-Connect writer
+  cancels. ([upstream sync])
+- **Upstream:** Restore the package-level TypeScript export of `Ordered` and
+  declare the missing namespaces in the bundled TREE node shape.
+  ([upstream sync])
+- **Upstream:** The updated N3 parser handles Turtle language tags split across
+  response chunks. The fork integration omits the superseded line-buffering
+  workaround to preserve multibyte characters split across chunks.
+  ([N3 fix], [#4])
+
+### Security
+
+- **Fork integration:** Update the runtime Undici dependency to 8.12.4 and
+  the separate development dependency to 6.29.1.
+  ([Undici 8.12.4], [Undici advisory], [#4])
+
 ## [0.4.2] - 2026-11-05
 
 ### Fixed
@@ -62,5 +105,12 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 [0.3.1]: https://github.com/inferal-oss/ldes-client/tree/v0.3.1
 [#1]: https://github.com/inferal-oss/ldes-client/pull/1
 [#3]: https://github.com/inferal-oss/ldes-client/pull/3
+[#4]: https://github.com/inferal-oss/ldes-client/pull/4
 [#6]: https://github.com/inferal-oss/ldes-client/pull/6
 [#7]: https://github.com/inferal-oss/ldes-client/pull/7
+[upstream sync]: https://github.com/KNowledgeOnWebScale/ldes-client/compare/v0.3.1...e3b3c44
+[upstream #154]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/154
+[upstream #157]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/157
+[N3 fix]: https://github.com/rdfjs/N3.js/issues/578
+[Undici 8.12.4]: https://github.com/nodejs/undici/releases/tag/v8.12.4
+[Undici advisory]: https://github.com/advisories/GHSA-2m5v-pch6-74hx

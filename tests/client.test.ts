@@ -1070,7 +1070,7 @@ describe("Client tests", () => {
         if (backend.persistsToFs) {
             expect(fs.existsSync("client-state-main")).toBeTruthy();
         }
-    })
+    });
 
     test("Client runs twice and only receives the latest version of every member in a reversed LDES", async () => {
         // Setup client 1
@@ -1170,7 +1170,7 @@ describe("Client tests", () => {
         if (backend.persistsToFs) {
             expect(fs.existsSync("client-state-main")).toBeTruthy();
         }
-    })
+    });
 
     test("Client runs twice with temporal filters and only receives the latest version of every member in a reversed LDES", async () => {
         // Setup client 1
@@ -1273,7 +1273,7 @@ describe("Client tests", () => {
         if (backend.persistsToFs) {
             expect(fs.existsSync("client-state-main")).toBeTruthy();
         }
-    })
+    });
 
     test("Client runs twice with different conditions and throws error", async () => {
         // Setup client 1
@@ -1324,7 +1324,7 @@ describe("Client tests", () => {
         }
 
         expect(threwError).toBeTruthy();
-    })
+    });
 
     }); // describe Storage
     } // for backends
@@ -1347,5 +1347,5 @@ describe("Client tests", () => {
         }
 
         expect(threwError).toBeTruthy();
-    })
+    });
 });
