@@ -54,7 +54,7 @@ if (typeof process !== "undefined" && process.release?.name === "node") {
         // winston is NOT bundled into CF Worker builds.
         const name = "winston";
         const m = await import(/* @vite-ignore */ name);
-        winston = m.default || m;
+        winston = typeof m.createLogger === "function" ? m : m.default;
     } catch {
         // winston not installed — fall back to ConsoleLogger
     }
