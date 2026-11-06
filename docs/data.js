@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793997399375,
+  "lastUpdate": 1793997791950,
   "repoUrl": "https://github.com/inferal-oss/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -222,6 +222,102 @@ window.BENCHMARK_DATA = {
             "value": 4098.267823253036,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.238–0.257 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yrashk@gmail.com",
+            "name": "Yurii Rashkovskii",
+            "username": "yrashk"
+          },
+          "committer": {
+            "email": "yrashk@gmail.com",
+            "name": "Yurii Rashkovskii",
+            "username": "yrashk"
+          },
+          "distinct": true,
+          "id": "b43e2fa7f6a59c54d515c7886bd1dc732c303159",
+          "message": "Release 0.5.0",
+          "timestamp": "2026-11-06T12:31:15-08:00",
+          "tree_id": "bccb666e5898a220086ac61422e097eeb1e2556f",
+          "url": "https://github.com/inferal-oss/ldes-client/commit/b43e2fa7f6a59c54d515c7886bd1dc732c303159"
+        },
+        "date": 1793997791176,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 6554.350954770764,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.514–1.556 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 18927.043147573335,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.494–0.550 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 21253.407101812387,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.468–0.475 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 6936.011776193844,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.436–1.470 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 22971.75711822449,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.429–0.452 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 26454.639923343126,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.368–0.387 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 5283.304237727816,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.821–1.946 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 23064.107984345355,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.426–0.447 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 30725.65498354976,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.317–0.339 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 2181.85639524779,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.453–0.460 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3223.4776553799315,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.300–0.319 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3505.9321248034703,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.280–0.294 s"
           }
         ]
       }
