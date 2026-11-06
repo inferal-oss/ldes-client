@@ -1,12 +1,9 @@
-import { getLoggerFor } from "../utils/";
-import { Condition } from "../condition";
-import type { KVStore } from "../storage";
+import { getLoggerFor } from "../../utils/";
+import { Condition } from "../../condition";
+import type { KVStore } from "../../storage";
 
-import type { ClientStateManager } from "../state";
-
-export type Notifier<Events, S> = {
-    [K in keyof Events]: (event: Events[K], state: S) => unknown;
-};
+import type { ClientStateManager } from "../../state";
+import type { Notifier } from "../../types";
 
 type Indexed<T> = {
     item: T;
@@ -74,6 +71,11 @@ export interface Modulator<F, M> {
      * @returns {Promise<ReadonlyArray<F>>} The mutable list.
     */
     getAllMutable(): Promise<ReadonlyArray<F>>
+
+    /**
+     * Returns one mutable fragment by URL if it is known.
+    */
+    getMutable(url: string): Promise<F | undefined>
 
     /**
      * Returns all data entities that have been extracted but not emitted yet.
@@ -174,6 +176,8 @@ type ModulatorState<F, M> = {
  * This is a factory to keep track whether the Modulator should be paused or not.
  */
 export class ModulatorFactory {
+    private logger = getLoggerFor(this);
+
     concurrent: number;
     paused: boolean = false;
     saveState: boolean = false;
@@ -242,7 +246,9 @@ export class ModulatorFactory {
 
     unpause() {
         this.paused = false;
-        Object.values(this.children).forEach(async (modulator) => await modulator.checkReady());
+        for (const modulator of Object.values(this.children)) {
+            modulator.checkReady().catch((ex) => this.logger.error(`Could not continue the fragments: ${ex}`));
+        }
     }
 
     close() {
@@ -398,6 +404,18 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         });
     }
 
+    async getMutable(url: string): Promise<F | undefined> {
+        if (this.closed) return;
+        return this.withState<F | undefined>(undefined, async (st) => {
+            const { mutable, fragmentParser } = st;
+            const value = await mutable.get(url).catch(() => undefined);
+            if (!value) {
+                return;
+            }
+            return fragmentParser ? fragmentParser(value) : value;
+        });
+    }
+
     async getAllUnemitted(): Promise<ReadonlyArray<M>> {
         if (this.closed) return [];
         return this.withState<ReadonlyArray<M>>([], async (st) => {
@@ -441,10 +459,6 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         if (this.closed) return false;
         return this.withState<boolean>(true, async (st) => {
             const { mutable, fragmentEncoder } = st;
-            if (await mutable.has(url)) {
-                // Fragment is already in mutable, so notifications may proceed
-                return true;
-            }
             await mutable.put(
                 url,
                 fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment

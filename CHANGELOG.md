@@ -8,12 +8,36 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ### Added
 
+- **Upstream 0.4.0** — Detect LDES 1.0 or experimental LDES 2.0 automatically
+  in the CLI and library. LDES 2.0 reads streamed RDF Message logs, including
+  gzip and Jelly-RDF, prefetches pages concurrently, applies replication
+  conditions, and saves a compact resume bookmark. The protocol is still a
+  draft. ([upstream 0.4.0])
+- **Upstream 0.4.0** — Add CLI member comments (`--comment`) and explicit
+  output format selection (`--format trig-messages|n-quads`). Add an LDES 1.0
+  conformance command and workflow, plus a CLI compatibility option for
+  ambiguous views. ([upstream 0.4.0])
+- **Fork integration** — The pluggable storage API now also saves experimental
+  LDES 2.0 bookmarks. Existing backends remain usable, including Level,
+  memory, and Cloudflare Durable Object SQLite. ([upstream #160])
 - **Upstream:** RDF-Connect pipelines accept IRIs for the stream URL and for
   shape, state, and condition file locations. Relative file IRIs resolve
   against the pipeline. ([upstream #154])
 
 ### Changed
 
+- **Upstream 0.4.0** — CLI output now defaults to TriG RDF Messages, one message
+  per member. Pass `--format n-quads` to request a flat quad stream. Library
+  stream consumers still receive member objects. ([upstream 0.4.0])
+- **Upstream 0.4.0** — Move the LDES 1.0 engine to `lib/ldes1` and shared
+  types to `lib/types.ts`. Applications that use internal paths need to
+  update them. The package entry point and fork storage subpaths remain
+  available. ([upstream 0.4.0])
+- **Upstream 0.4.0** — Apply retries and per-domain concurrency to configured
+  fetches by default. Use LDFetch for dereferencing, update RDF parser and
+  shape extraction dependencies, clean the build output before compiling,
+  and replace the legacy Bun-based Docker build with Node.js and the npm
+  lockfile. ([upstream 0.4.0])
 - **Upstream:** The RDF-Connect processor schema separates code identifiers from
   display labels and supplies descriptions, allowed values, and defaults.
   The sync was tested with RDF-Connect JS runner 3.4.0. Runner 3.0.2 cannot
@@ -22,9 +46,8 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
   Set `pollInterval`, `--poll-interval`, or the pipeline’s `rdfc:interval`
   to 200 ms to keep the previous cadence.
   ([upstream #154])
-- **Upstream:** Updated the RDF parser to N3 2, the dereferencer to
-  `rdf-dereference` 5, and the SHACL lens library to `rdf-lens` 2. Also
-  updated the shape extractor, RDF store, and CLI dependencies. The locked
+- **Upstream:** Updated the RDF parser to N3 2 and the SHACL lens library to
+  `rdf-lens` 2. Also updated the RDF store and CLI dependencies. The locked
   runtime dependencies require Node.js 22.19.0 or newer. The sync was tested
   on Node.js 24. ([upstream sync])
 - **Upstream:** Updated the build, lint, and browser test tooling, including
@@ -33,6 +56,17 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ### Fixed
 
+- **Upstream 0.4.0** — Improve LDES 1.0 discovery, context and member
+  extraction, including generalized SHACL paths, advertised poll intervals,
+  transaction finalization, and handling of cached or retired pages.
+  Extract large pages in one pass and compare relation bounds against
+  conditions on matching paths. ([upstream 0.4.0])
+- **Upstream 0.4.0** — Preserve chronological ordering with sequence tie
+  breaking, compare non-date bounds, and restore saved relation types.
+  Keep defaults when options are explicitly passed as `undefined` and
+  report asynchronous traversal failures. ([upstream 0.4.0], [upstream #161])
+- **Fork integration** — Keep sequence strings from existing saved member
+  state and preserve ordering value types across future restarts.
 - **Upstream:** Cancel LDES fetching when the downstream RDF-Connect writer
   cancels. ([upstream sync])
 - **Upstream:** Restore the package-level TypeScript export of `Ordered` and
@@ -111,6 +145,9 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 [upstream sync]: https://github.com/KNowledgeOnWebScale/ldes-client/compare/v0.3.1...e3b3c44
 [upstream #154]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/154
 [upstream #157]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/157
+[upstream 0.4.0]: https://github.com/KNowledgeOnWebScale/ldes-client/releases/tag/v0.4.0
+[upstream #160]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/160
+[upstream #161]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/161
 [N3 fix]: https://github.com/rdfjs/N3.js/issues/578
 [Undici 8.12.4]: https://github.com/nodejs/undici/releases/tag/v8.12.4
 [Undici advisory]: https://github.com/advisories/GHSA-2m5v-pch6-74hx

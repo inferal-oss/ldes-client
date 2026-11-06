@@ -1,10 +1,11 @@
 import { RDF, TREE } from "@treecg/types";
 import { RdfStore } from "rdf-stores";
-import { RelationCondition } from "../condition";
-import { getObjects, getLoggerFor } from "../utils";
+import { RelationCondition } from "../../condition";
+import { getObjects, getLoggerFor, shaclPathKey } from "../../utils";
 
 import type { Term } from "@rdfjs/types";
-import type { Condition } from "../condition";
+import type { Condition } from "../../condition";
+import type { OrderValue } from "../../types";
 
 export interface FoundRelation {
     source: string;
@@ -18,13 +19,12 @@ export interface RelationKind {
     type: Term;
     value?: Term[];
     path?: Term;
+    pathKey?: string;
 }
-
-export type RelationValue = string | Date | number;
 
 export type SimpleRelation = {
     important: boolean;
-    value: RelationValue;
+    value: OrderValue;
 };
 
 export function extractRelations(
@@ -48,7 +48,7 @@ export function extractRelations(
     >();
 
     for (const relationId of relationIds) {
-        const node = getObjects(store, relationId, TREE.terms.node, null)[0];
+        const nodes = getObjects(store, relationId, TREE.terms.node, null);
         const ty =
             getObjects(store, relationId, RDF.terms.type, null)[0] ||
             TREE.Relation;
@@ -58,25 +58,28 @@ export function extractRelations(
         const relation = {
             type: ty,
             path,
+            pathKey: shaclPathKey(store, path),
             value,
             id: relationId,
         };
-        const found = conditions.get(node.value);
-        if (!found) {
-            const condition = new RelationCondition(store, defaultTimezone);
-            condition.addRelation(relationId);
-            conditions.set(node.value, {
-                cond: condition,
-                relation: {
-                    node: node.value,
-                    source,
-                    allowed: false,
-                    relations: [relation],
-                },
-            });
-        } else {
-            found.relation.relations.push(relation);
-            found.cond.addRelation(relationId);
+        for (const node of nodes) {
+            const found = conditions.get(node.value);
+            if (!found) {
+                const condition = new RelationCondition(store, defaultTimezone);
+                condition.addRelation(relationId);
+                conditions.set(node.value, {
+                    cond: condition,
+                    relation: {
+                        node: node.value,
+                        source,
+                        allowed: false,
+                        relations: [relation],
+                    },
+                });
+            } else {
+                found.relation.relations.push(relation);
+                found.cond.addRelation(relationId);
+            }
         }
     }
 
@@ -101,14 +104,14 @@ export class RelationChain {
     source: string;
     relations: SimpleRelation[];
     target: string;
-    private cmp?: (a: RelationValue, b: RelationValue) => number;
+    private cmp?: (a: OrderValue, b: OrderValue) => number;
 
     constructor(
         source: string,
         target: string,
         relations: SimpleRelation[] = [],
         additional?: SimpleRelation,
-        cmp?: (a: RelationValue, b: RelationValue) => number,
+        cmp?: (a: OrderValue, b: OrderValue) => number,
     ) {
         this.source = source;
         this.target = target;

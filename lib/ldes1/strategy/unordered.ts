@@ -1,17 +1,21 @@
 import { Fetcher, ModulatorFactory, Manager } from "../fetcher";
-import { deserializeMember, getLoggerFor, serializeMember } from "../utils";
-import { Condition } from "../condition";
+import { deserializeMember, getLoggerFor, serializeMember } from "../../utils";
+import { Condition } from "../../condition";
 
 import type {
-    FetchedPage,
     FetchEvent,
     Node,
     Modulator,
-    Notifier,
     MemberEvents,
-    Member
+    Ranker
 } from "../fetcher";
-import type { StrategyEvents, SerializedMember } from ".";
+import type {
+    FetchedPage,
+    Notifier,
+    Member,
+    StrategyEvents,
+    SerializedMember,
+} from "../../types";
 
 export class UnorderedStrategy {
     private manager: Manager;
@@ -25,6 +29,7 @@ export class UnorderedStrategy {
     >;
 
     private modulator: Modulator<Node, Member>;
+    private preloadedPages = new Map<string, FetchedPage>();
 
     private polling: boolean;
     private pollInterval?: number;
@@ -77,8 +82,11 @@ export class UnorderedStrategy {
                 for (const { from, target } of relations) {
                     this.logger.debug(`[fetchNotifier - relationFound] Found relation leading to ${target.node}`);
                     from.expected.add(target.node);
+                    const saved = await this.modulator.getMutable(target.node);
                     toPush.push({
                         target: target.node,
+                        etag: saved?.etag,
+                        relations: saved?.relations,
                         expected: new Set([from.target]),
                     });
                 }
@@ -119,7 +127,7 @@ export class UnorderedStrategy {
                     this.logger.debug(`[memberNotifier - done] Remembering immutable page to avoid future refetching: ${fragment.url}`);
                     if (!await this.modulator.addImmutable(fragment.url)) return;
                 }
-                this.checkEnd();
+                this.background(this.checkEnd());
             },
         };
 
@@ -128,29 +136,41 @@ export class UnorderedStrategy {
          */
         this.modulator = modulatorFactory.create<Node, Member>(
             "fetcher",
-            [],
+            new QueueRanker(),
             {
                 ready: async ({ item, index }) => {
-                    // Only fetch this node if it hasn't been fetched in the past
-                    if (!(await this.modulator.seen(item.target))) {
-                        this.logger.debug(`[modulator - ready] Ready to fetch page: ${item.target}`);
-                        this.fetcher.fetch(item, { index }, this.fetchNotifier);
+                        const preloadedPage = this.preloadedPages.get(item.target);
+                        if (preloadedPage) {
+                            this.preloadedPages.delete(item.target);
+                            await this.fetcher.processFetchedPage(
+                                item,
+                                preloadedPage,
+                                { index },
+                                this.fetchNotifier,
+                            );
+                        } else if (!(await this.modulator.seen(item.target))) {
+                            this.logger.debug(`[modulator - ready] Ready to fetch page: ${item.target}`);
+                            this.background(this.fetcher.fetch(item, { index }, this.fetchNotifier));
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${item.target}`);
                         await this.modulator.finished(index);
-                        this.checkEnd();
+                        this.background(this.checkEnd());
                     }
                 },
             },
             (inp: Node) => {
                 return {
                     target: inp.target,
+                    etag: inp.etag,
+                    relations: inp.relations,
                     expected: Array.from(inp.expected),
                 };
             },
             (inp: unknown) => {
                 return {
                     target: (inp as Node).target,
+                    etag: (inp as Node).etag,
+                    relations: (inp as Node).relations,
                     expected: new Set((inp as Node).expected),
                 };
             },
@@ -159,21 +179,28 @@ export class UnorderedStrategy {
         );
     }
 
-    async start(url: string, condition: Condition, root?: FetchedPage) {
+    async start(
+        url: string,
+        condition: Condition,
+        root?: FetchedPage,
+        traverseRoot = true,
+    ) {
         if (this.canceled) return;
         // Try to initialize the modulator
         if (!(await this.modulator.init(condition))) return;
 
-        if (root) {
-            // This is a local dump. Proceed to extract members
-            this.manager.extractMembers(
+        if (root && !traverseRoot) {
+            this.background(this.manager.extractMembers(
                 root,
                 { index: 0, modulator: this.modulator },
                 this.memberNotifier
-            );
+            ));
+        } else if (root) {
+            this.preloadedPages.set(root.url, root);
+            await this.modulator.push([{ target: root.url, expected: new Set() }]);
         } else if ((await this.modulator.pendingCount()) < 1) {
             this.logger.debug("[start] Nothing in pending, adding start url");
-            this.modulator.push([{ target: url, expected: new Set() }]);
+            this.background(this.modulator.push([{ target: url, expected: new Set() }]));
         } else {
             this.logger.debug(
                 "[start] Pending things are already being processed, not adding start url",
@@ -186,12 +213,20 @@ export class UnorderedStrategy {
         await this.processing;
     }
 
+    /**
+     * Runs work that nobody waits for. When it fails, that is reported as an error of the client, where it would
+     * otherwise be an unhandled rejection that stops the process.
+     */
+    private background(work: Promise<unknown>) {
+        work.catch((ex) => this.notifier.error(ex, {}));
+    }
+
     private handleFetched(page: FetchedPage, index: number) {
-        this.manager.extractMembers(
+        this.background(this.manager.extractMembers(
             page,
             { index, modulator: this.modulator },
             this.memberNotifier
-        );
+        ));
     }
 
     /**
@@ -231,10 +266,14 @@ export class UnorderedStrategy {
             // Make sure we don't schedule multiple polling cycles
             if (this.polling) {
                 this.logger.debug(`[_checkEnd] Polling is enabled, setting timeout of ${this.pollInterval || 1000} ms to poll`);
-                setTimeout(async () => {
-                    if (this.canceled) return;
-                    this.notifier.pollCycle({}, {});
-                    this.modulator.push(await this.modulator.getAllMutable());
+                setTimeout(() => {
+                    this.background(
+                        (async () => {
+                            if (this.canceled) return;
+                            this.notifier.pollCycle({}, {});
+                            await this.modulator.push(await this.modulator.getAllMutable());
+                        })(),
+                    );
                 }, this.pollInterval || 1000);
             } else {
                 this.logger.debug("[_checkEnd] Closing the notifier, polling is not set");
@@ -242,5 +281,17 @@ export class UnorderedStrategy {
                 this.notifier.close({}, {});
             }
         }
+    }
+}
+
+class QueueRanker<T> implements Ranker<T> {
+    private items: T[] = [];
+
+    push(item: T): void {
+        this.items.push(item);
+    }
+
+    pop(): T | undefined {
+        return this.items.shift();
     }
 }

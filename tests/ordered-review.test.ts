@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { DataFactory, Parser } from "n3";
-import { OrderedStrategy } from "../lib/strategy/ordered";
-import { RelationChain } from "../lib/fetcher/relation";
-import type { Fetcher, Manager, ModulatorFactory, Notifier, RelationValue } from "../lib/fetcher";
-import type { StrategyEvents } from "../lib/strategy";
+import { OrderedStrategy } from "../lib/ldes1/strategy/ordered";
+import { RelationChain } from "../lib/ldes1/fetcher/relation";
+import type { Fetcher, Manager, ModulatorFactory } from "../lib/ldes1/fetcher";
+import type { LDESInfo, Notifier, OrderValue, StrategyEvents } from "../lib/types";
 import { replicateLDES } from "../lib/client";
 import { read, Tree } from "./helper";
 
@@ -26,14 +26,16 @@ function codecs(sequence: boolean) {
     } as unknown as ModulatorFactory;
     new OrderedStrategy(
         {} as Manager, {} as Fetcher, {} as Notifier<StrategyEvents, unknown>,
-        factory, "ascending", false, undefined, sequence ? undefined : DataFactory.namedNode(TIMESTAMP),
-        sequence ? DataFactory.namedNode(SEQUENCE) : undefined,
+        factory, {
+            timestampPath: sequence ? undefined : DataFactory.namedNode(TIMESTAMP),
+            sequencePath: sequence ? DataFactory.namedNode(SEQUENCE) : undefined,
+        } as LDESInfo, "ascending", false,
     );
     return { encode, decode };
 }
 
 describe("ordered state restoration", () => {
-    test.each(["01", "2025-01-01", "2025-01-01T00:00:00.000Z", "uuid-value"])("preserves sequence string %s through JSON", (value) => {
+    test.each(["", "01", "2025-01-01", "2025-01-01T00:00:00.000Z", "uuid-value"])("preserves sequence string %s through JSON", (value) => {
         const { encode, decode } = codecs(true);
         const input = { chain: new RelationChain("root", "page", [{ important: true, value }]), expected: new Set(["page"]) };
         const restored = decode(JSON.parse(JSON.stringify(encode(input))));
@@ -58,7 +60,7 @@ describe("ordered state restoration", () => {
         const { decode } = codecs(sequence);
         const value = "2025-01-01T00:00:00.000Z";
         const restored = decode({ chain: { source: "root", target: "page", relations: [{ important: true, value }] }, expected: [] });
-        const actual: RelationValue = restored.chain.relations[0].value;
+        const actual: OrderValue = restored.chain.relations[0].value;
         expect(actual).toEqual(sequence ? value : new Date(value));
     });
 });
