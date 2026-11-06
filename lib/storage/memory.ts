@@ -47,13 +47,13 @@ class MemoryKVStore<K extends string | number, V> implements KVStore<K, V> {
 }
 
 export class MemoryStorage implements Storage {
-    private stores = new Map<string, MemoryKVStore<any, any>>();
+    private stores = new Map<string, MemoryKVStore<string | number, unknown>>();
 
     store<K extends string | number, V>(name: string): KVStore<K, V> {
         if (!this.stores.has(name)) {
             this.stores.set(name, new MemoryKVStore<K, V>());
         }
-        return this.stores.get(name)!;
+        return this.stores.get(name)! as MemoryKVStore<K, V>;
     }
 
     async close(): Promise<void> {

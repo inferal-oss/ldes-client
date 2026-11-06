@@ -1,3 +1,4 @@
+import type { AddressInfo } from "node:net";
 import { describe, beforeAll, afterAll, afterEach, expect, test } from "vitest";
 import fs from "fs";
 import path from "path";
@@ -12,7 +13,7 @@ import { DOSqliteStorage } from "../lib/storage/do-sqlite";
 import { createDurableObjectState } from "@inferal-oss/cf-dosql";
 
 import type { FastifyInstance } from "fastify";
-import type { FetchedPage, LDESInfo } from "../lib/fetcher";
+import type { FetchedPage, LDESInfo } from "../lib/types";
 
 describe("Client tests", () => {
     const LDES = "http://localhost:3001/mock-ldes.ttl";
@@ -70,7 +71,7 @@ describe("Client tests", () => {
 
             await server.listen({ port: 3001 });
             console.log(
-                `Mock server listening on ${server.addresses()[0].port}`,
+                `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
             );
         } catch (err) {
             console.error(err);
@@ -112,7 +113,7 @@ describe("Client tests", () => {
                 configOverrides() {
                     if (!state) {
                         state = createDurableObjectState();
-                        storage = new DOSqliteStorage(state.ctx.storage as any);
+                        storage = new DOSqliteStorage(state.ctx.storage);
                     }
                     return { storage };
                 },

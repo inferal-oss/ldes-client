@@ -11,7 +11,10 @@ test.each(["ESM", "CommonJS"])("built package works for %s consumers", (mode) =>
         const require = createRequire(import.meta.url);
         const load = ${mode === "ESM" ? "(name) => import(name)" : "async (name) => require(name)"};
         const name = ${JSON.stringify(packageName)};
-        for (const suffix of ["", "/storage", "/storage/level", "/storage/memory", "/storage/do-sqlite"]) {
+        const { replicateLDES, intoConfig } = await load(name);
+        assert.equal(typeof replicateLDES, "function");
+        assert.equal(intoConfig({ url: "https://example.org/ldes" }).url, "https://example.org/ldes");
+        for (const suffix of ["/storage", "/storage/level", "/storage/memory", "/storage/do-sqlite"]) {
             await load(name + suffix);
         }
         const { LevelStorage } = await load(name + "/storage/level");
