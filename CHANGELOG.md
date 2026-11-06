@@ -6,6 +6,8 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-06
+
 ### Added
 
 - **Upstream** — Detect LDES 1.0 or experimental LDES 2.0 automatically
@@ -132,7 +134,8 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 - The fork is distributed on npm as `@inferal-oss/ldes-client`.
 
-[Unreleased]: https://github.com/inferal-oss/ldes-client/compare/v0.4.2...main
+[Unreleased]: https://github.com/inferal-oss/ldes-client/compare/v0.5.0...main
+[0.5.0]: https://github.com/inferal-oss/ldes-client/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/inferal-oss/ldes-client/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/inferal-oss/ldes-client/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/inferal-oss/ldes-client/compare/v0.3.1...v0.4.0
