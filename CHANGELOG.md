@@ -8,12 +8,12 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ### Added
 
-- **Upstream 0.4.0** — Detect LDES 1.0 or experimental LDES 2.0 automatically
+- **Upstream** — Detect LDES 1.0 or experimental LDES 2.0 automatically
   in the CLI and library. LDES 2.0 reads streamed RDF Message logs, including
   gzip and Jelly-RDF, prefetches pages concurrently, applies replication
   conditions, and saves a compact resume bookmark. The protocol is still a
   draft. ([upstream 0.4.0])
-- **Upstream 0.4.0** — Add CLI member comments (`--comment`) and explicit
+- **Upstream** — Add CLI member comments (`--comment`) and explicit
   output format selection (`--format trig-messages|n-quads`). Add an LDES 1.0
   conformance command and workflow, plus a CLI compatibility option for
   ambiguous views. ([upstream 0.4.0])
@@ -26,14 +26,14 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ### Changed
 
-- **Upstream 0.4.0** — CLI output now defaults to TriG RDF Messages, one message
+- **Upstream** — CLI output now defaults to TriG RDF Messages, one message
   per member. Pass `--format n-quads` to request a flat quad stream. Library
   stream consumers still receive member objects. ([upstream 0.4.0])
-- **Upstream 0.4.0** — Move the LDES 1.0 engine to `lib/ldes1` and shared
+- **Upstream** — Move the LDES 1.0 engine to `lib/ldes1` and shared
   types to `lib/types.ts`. Applications that use internal paths need to
   update them. The package entry point and fork storage subpaths remain
   available. ([upstream 0.4.0])
-- **Upstream 0.4.0** — Apply retries and per-domain concurrency to configured
+- **Upstream** — Apply retries and per-domain concurrency to configured
   fetches by default. Use LDFetch for dereferencing, update RDF parser and
   shape extraction dependencies, clean the build output before compiling,
   and replace the legacy Bun-based Docker build with Node.js and the npm
@@ -56,12 +56,12 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ### Fixed
 
-- **Upstream 0.4.0** — Improve LDES 1.0 discovery, context and member
+- **Upstream** — Improve LDES 1.0 discovery, context and member
   extraction, including generalized SHACL paths, advertised poll intervals,
   transaction finalization, and handling of cached or retired pages.
   Extract large pages in one pass and compare relation bounds against
   conditions on matching paths. ([upstream 0.4.0])
-- **Upstream 0.4.0** — Preserve chronological ordering with sequence tie
+- **Upstream** — Preserve chronological ordering with sequence tie
   breaking, compare non-date bounds, and restore saved relation types.
   Keep defaults when options are explicitly passed as `undefined` and
   report asynchronous traversal failures. ([upstream 0.4.0], [upstream #161])
