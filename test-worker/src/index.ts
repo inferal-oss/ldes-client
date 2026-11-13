@@ -10,7 +10,7 @@
  *   GET  /                          — healthcheck
  */
 
-import { replicateLDES, intoConfig } from "@inferal-oss/ldes-client";
+import { replicateLDES, intoConfig, enhanced_fetch } from "@inferal-oss/ldes-client";
 import { DOSqliteStorage } from "@inferal-oss/ldes-client/storage/do-sqlite";
 
 interface Env {
@@ -87,13 +87,13 @@ export class LDESState implements DurableObject {
                     urlIsView,
                     startFresh,
                     storage,
-                    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+                    fetch: enhanced_fetch({}, (input: RequestInfo | URL, init?: RequestInit) => {
                         const headers = new Headers(init?.headers);
                         if (authHeader) {
                             headers.set("Authorization", authHeader);
                         }
                         return fetch(input, { ...init, headers });
-                    },
+                    }),
                 }),
             );
 

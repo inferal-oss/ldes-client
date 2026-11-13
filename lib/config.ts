@@ -3,7 +3,9 @@ import { enhanced_fetch } from "./fetcher/enhancedFetch";
 
 import type { NamedNode, Quad } from "@rdfjs/types";
 import type { Condition } from "./condition";
+import type { TransferRetry } from "./fetcher/ldfetchDereferencer";
 import type { Storage } from "./storage";
+import type { ContextCacheOptions } from "./fetcher/contextCache";
 
 export interface ShapeConfig {
     quads: Quad[];
@@ -37,6 +39,19 @@ export interface Config {
     startFresh?: boolean;
     fetch?: typeof fetch;
     storage?: Storage;
+    /**
+     * How external JSON-LD contexts (such as https://schema.org) are cached. Only these are cached, not the pages.
+     * They follow HTTP caching semantics, but are kept for at least `minTTL` seconds (default: 600),
+     * as contexts hardly ever change and are often served without useful cache headers.
+     * Pass `false` to not cache contexts.
+     */
+    contextCache?: ContextCacheOptions | false;
+    /**
+     * What to do when the server drops the connection while a page is being transferred, after it sent a successful response.
+     * The page is requested again, with a doubling time between the requests. The default is 5 new requests, starting after 500 ms.
+     * A `maxRetries` of 0 is unlimited, as for `--retry-count`.
+     */
+    transferRetry?: Partial<TransferRetry>;
 }
 
 export interface WithTarget {
@@ -71,16 +86,17 @@ export async function getConfig(): Promise<Config & WithTarget> {
 export function intoConfig(config: Partial<Config>): Config {
     // An option that is passed as undefined (for example by the RDF-Connect processor, for everything that
     // the pipeline does not set) keeps its default, instead of replacing it with undefined
-    const given = Object.fromEntries(
-        Object.entries(config).filter(([, value]) => value !== undefined),
-    );
+    const given = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined));
     const out = Object.assign({}, defaultConfig, defaultTarget, given);
-    out.fetch = enhanced_fetch({
-        retry: {
-            base: 10,
-            maxRetries: 10,
+    out.fetch = enhanced_fetch(
+        {
+            retry: {
+                base: 10,
+                maxRetries: 10,
+            },
+            concurrent: out.concurrentFetches,
         },
-        concurrent: out.concurrentFetches,
-    }, config.fetch);
+        config.fetch,
+    );
     return out;
 }
