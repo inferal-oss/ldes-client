@@ -6,6 +6,35 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Upstream** — Cache external JSON-LD contexts according to HTTP cache
+  headers, with a default 10-minute minimum TTL. The cache honors
+  `Cache-Control: no-store` and revalidates stale contexts with
+  `ETag` or `Last-Modified`. Configure or disable it with `contextCache`.
+  ([upstream #165])
+- **Fork integration** — Adopt the upstream implementation of pluggable
+  storage and Cloudflare Workers support, including the runtime-specific
+  logging used by Node.js, browsers, and Workers. The scoped package keeps
+  its storage entry points and existing saved state remains readable.
+  ([upstream #160])
+- **Upstream** — Speed up experimental LDES 2.0 resume when many members
+  share a bookmark timestamp by using a set for membership checks.
+  ([upstream #163])
+
+### Fixed
+
+- **Upstream** — Retry interrupted page transfers in LDES 1.0 and
+  experimental LDES 2.0. LDES 2.0 skips members already read from the page
+  and reports an error if the page changed between attempts. Set the retry
+  limit with `--retry-count` in the CLI or `transferRetry` in the library.
+  ([upstream #166])
+- **Upstream** — Exclude members exactly at the `--after` or `--before`
+  timestamp in experimental LDES 2.0, matching LDES 1.0.
+  ([upstream #168])
+- **Upstream** — Read local LDES 1.0 dumps whose stream identifier is a web
+  IRI without trying to discover the stream over the network. ([local dump fix])
+
 ## [0.5.0] - 2026-11-06
 
 ### Added
@@ -151,6 +180,11 @@ starting from its [upstream 0.3.1 baseline][0.3.1]. The format follows
 [upstream 0.4.0]: https://github.com/KNowledgeOnWebScale/ldes-client/releases/tag/v0.4.0
 [upstream #160]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/160
 [upstream #161]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/161
+[upstream #163]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/163
+[upstream #165]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/165
+[upstream #166]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/166
+[upstream #168]: https://github.com/KNowledgeOnWebScale/ldes-client/pull/168
+[local dump fix]: https://github.com/KNowledgeOnWebScale/ldes-client/commit/904ec71
 [N3 fix]: https://github.com/rdfjs/N3.js/issues/578
 [Undici 8.12.4]: https://github.com/nodejs/undici/releases/tag/v8.12.4
 [Undici advisory]: https://github.com/advisories/GHSA-2m5v-pch6-74hx

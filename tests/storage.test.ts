@@ -22,7 +22,7 @@ describe.each(["Level", "Memory", "SQLite"])("%s storage contract", (backend) =>
             storage = new MemoryStorage();
         } else {
             sqlite = createDurableObjectState();
-            storage = new DOSqliteStorage(sqlite.ctx.storage as unknown as ConstructorParameters<typeof DOSqliteStorage>[0]);
+            storage = new DOSqliteStorage(sqlite.ctx.storage);
         }
         await storage.init?.();
     });
@@ -75,10 +75,32 @@ describe.each(["Level", "Memory", "SQLite"])("%s storage contract", (backend) =>
     });
 });
 
+test("SQLite fresh start clears shared state and preserves other tables", async () => {
+    const sqlite = createDurableObjectState();
+    try {
+        const storage = new DOSqliteStorage(sqlite.ctx.storage, "orders_state");
+        const shared = new DOSqliteStorage(sqlite.ctx.storage, "orders_state");
+        const other = new DOSqliteStorage(sqlite.ctx.storage, "products_state");
+        const sharedMembers = shared.store<string, string>("members");
+        const otherMembers = other.store<string, string>("members");
+        await sharedMembers.put("key", "saved order");
+        await otherMembers.put("key", "saved product");
+
+        await new ClientStateManager(storage, undefined, true).init();
+
+        expect(await sharedMembers.get("key")).toBeUndefined();
+        expect(await otherMembers.get("key")).toBe("saved product");
+    } finally {
+        sqlite.close();
+    }
+});
+
 test("the state manager waits for asynchronous storage initialization", async () => {
     const memory = new MemoryStorage();
     let release!: () => void;
-    const ready = new Promise<void>((resolve) => { release = resolve; });
+    const ready = new Promise<void>((resolve) => {
+        release = resolve;
+    });
     const storage: Storage = {
         store: memory.store.bind(memory),
         close: memory.close.bind(memory),
@@ -86,7 +108,9 @@ test("the state manager waits for asynchronous storage initialization", async ()
     };
     const manager = new ClientStateManager(storage);
     let initialized = false;
-    const initializing = manager.init().then(() => { initialized = true; });
+    const initializing = manager.init().then(() => {
+        initialized = true;
+    });
     try {
         await Promise.resolve();
         expect(initialized).toBe(false);
@@ -98,7 +122,9 @@ test("the state manager waits for asynchronous storage initialization", async ()
 
 test("the state manager reports asynchronous initialization failures", async () => {
     const storage = new MemoryStorage();
-    storage.init = async () => { throw new Error("initialization failed"); };
+    storage.init = async () => {
+        throw new Error("initialization failed");
+    };
     await expect(new ClientStateManager(storage).init()).rejects.toThrow("initialization failed");
 });
 
